@@ -1,6 +1,24 @@
 # Database Migrations Guide
 
-## Quick Start
+## Quick Start (Supabase)
+
+1. Create a project at [supabase.com](https://supabase.com) and note the database password you set.
+2. **Settings → Database → Connection string → URI** — copy the URI (shape: `postgresql://postgres:[YOUR-PASSWORD]@db.xxxx.supabase.co:5432/postgres`).
+3. In `backend/.env`, set:
+   ```env
+   DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.xxxx.supabase.co:5432/postgres
+   ```
+   If connections fail from your machine, append `?sslmode=require` (or use the URI Supabase gives you if it already includes SSL query params).
+
+4. **Run migrations:**
+   ```bash
+   cd backend
+   alembic upgrade head
+   ```
+
+You should see revisions `001_initial` and `002_verify_dashboard` applied (`alembic current` shows `002_verify_dashboard` at head).
+
+## Local PostgreSQL (optional)
 
 1. **Ensure database exists:**
    ```bash
@@ -12,7 +30,7 @@
    DATABASE_URL=postgresql://user:password@localhost:5432/gulftax_ai
    ```
 
-3. **Run migrations:**
+3. **Run migrations** (same as above):
    ```bash
    cd backend
    alembic upgrade head
