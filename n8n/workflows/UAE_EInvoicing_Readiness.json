@@ -1,0 +1,427 @@
+{
+  "name": "UAE E-Invoicing Readiness",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "1772d136-99a4-4670-b010-549b1da3b31a",
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b3c0aa24-f46f-4f1f-921c-8d5b25a33717",
+              "name": "spreadsheetId",
+              "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4fe97926-8d9d-4cb0-b66c-f3fb1e238e97",
+      "name": "Set Sheet IDs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "78172c2d-8b32-4ef7-b9f6-6fd2f8b1a562",
+              "name": "anthropicModel",
+              "value": "claude-opus-4-7",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f712ae9-09c4-420b-b9a8-23f8e9fbb93c",
+      "name": "Set API Constants",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Set Sheet IDs').first().json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "E-Invoicing Intake",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "44aa1ca1-6061-404d-8a39-ee381b79def1",
+      "name": "Read Intake Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\nfor (const item of items) {\n  const r = item.json;\n  const revenue = parseFloat(String(r['Annual Revenue AED'] ?? r['Annual Revenue AED '] ?? '0').replace(/,/g, '')) || 0;\n  const asp = String(r['ASP Appointed'] ?? '').toUpperCase() === 'YES';\n  const fmt = String(r['Current Invoice Format'] ?? '');\n  const integration = String(r['Integration Status'] ?? 'not_started');\n  const masterClean = String(r['Master Data Clean'] ?? '').toUpperCase();\n  const budget = String(r['ERP Upgrade Budget Confirmed'] ?? '').toUpperCase() === 'YES';\n  const invPm = parseInt(String(r['Invoices Per Month'] ?? '0'), 10) || 0;\n  const business = String(r['Business Type'] ?? '');\n\n  let phase = 'out_of_scope';\n  let phaseLabel = 'Out of scope / not in Phase 1 mandate';\n  if (revenue >= 50000000) {\n    phase = 'phase_1';\n    phaseLabel = 'Phase 1 (Revenue \u2265 AED 50M) \u2014 CRITICAL';\n  } else if (revenue >= 1) {\n    phase = 'phase_2';\n    phaseLabel = 'Phase 2 (other businesses)';\n  }\n\n  let score = 100;\n  const gaps = [];\n  if (!asp) { score -= 35; gaps.push({ level: 'critical', text: 'No accredited ASP appointed' }); }\n  if (['PDF','Paper','Email'].includes(fmt)) { score -= 25; gaps.push({ level: 'high', text: 'Invoice format not Peppol / PINT AE ready' }); }\n  if (integration === 'not_started') { score -= 15; gaps.push({ level: 'high', text: 'ERP / ASP integration not started' }); }\n  if (masterClean === 'NO' || masterClean === 'PARTIAL') { score -= 12; gaps.push({ level: 'high', text: 'Master data not clean for e-invoicing' }); }\n  if (!budget) { score -= 8; gaps.push({ level: 'medium', text: 'ERP upgrade budget not confirmed' }); }\n  if (invPm > 500 && integration !== 'live') { score -= 5; gaps.push({ level: 'medium', text: 'High invoice volume without live integration' }); }\n  if (business === 'B2C' && revenue < 50000000) { score -= 5; }\n\n  score = Math.max(0, Math.min(100, Math.round(score)));\n\n  const aspDeadline = new Date('2026-07-31T23:59:59Z');\n  const goLive = revenue >= 50000000 ? new Date('2027-01-01T00:00:00Z') : new Date('2027-07-01T00:00:00Z');\n  const today = new Date();\n  const daysAsp = Math.ceil((aspDeadline - today) / 86400000);\n  const daysLive = Math.ceil((goLive - today) / 86400000);\n\n  let costLow = 150000, costHigh = 400000;\n  if (revenue >= 50000000) { costLow = 650000; costHigh = 1850000; }\n  else if (revenue >= 10000000) { costLow = 350000; costHigh = 950000; }\n\n  const penaltyExposure = (!asp && revenue >= 50000000) ? 60000 : 5000;\n\n  let urgency = 'GREEN';\n  if (phase === 'phase_1' && score < 40) urgency = 'RED';\n  else if (phase === 'phase_1' || score < 55) urgency = 'AMBER';\n\n  const criticalGaps = gaps.filter(g => g.level === 'critical').length;\n  const highGaps = gaps.filter(g => g.level === 'high').length;\n\n  const ctx = JSON.stringify({\n    company: r['Company Name'],\n    trn: r['TRN Number'],\n    revenue,\n    phase,\n    phaseLabel,\n    score,\n    urgency,\n    gaps,\n    daysAsp,\n    daysLive,\n    costLow,\n    costHigh,\n    penaltyExposure,\n    criticalGaps,\n    highGaps,\n    fmt,\n    integration,\n    asp,\n    business,\n    entity: r['Entity Type'],\n  });\n\n  const prompt = `You are a UAE tax technology advisor. Ministerial Decisions 243/244 (2025) set e-invoicing timelines (Phase 1 revenue \u2265 AED 50M go-live 1 Jan 2027; ASP appointment by 31 Jul 2026). Peppol PINT AE is the technical baseline.\n\nEngine output (JSON): ${ctx}\n\nWrite a concise CFO-ready advisory (max 450 words) with sections: (1) Executive summary (2) Phase & deadlines (3) Top gaps & remediation (4) Cost & resourcing (5) Next 3 actions this week. Use AED. Be direct; no markdown code fences.`;\n\n  results.push({ json: { ...r, _readiness: { phase, phaseLabel, score, urgency, gaps, daysAsp, daysLive, costLow, costHigh, penaltyExposure, criticalGaps, highGaps }, claudeUserMessage: prompt } });\n}\nreturn results;"
+      },
+      "id": "a96ecdef-59ce-43d4-9f4d-1a2f55982ca1",
+      "name": "Calculate E-Invoicing Readiness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "34ed6847-5ce4-401c-8fbf-1a2aa24ca536",
+              "leftValue": "={{ $json.Status }}",
+              "rightValue": "READY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fc92874c-afca-41a3-80dc-1d339ba81cd1",
+      "name": "Filter Status READY",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Set API Constants').first().json.anthropicModel, max_tokens: 4096, messages: [{ role: 'user', content: $json.claudeUserMessage }] }) }}"
+      },
+      "id": "c20bb906-62f3-40f6-970f-d1faa3ba4082",
+      "name": "Claude Advisory (Opus 4.7)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const anth = $input.first().json;\nconst itemIndex = $itemIndex;\nconst bases = $('Calculate E-Invoicing Readiness').all();\nconst base = bases[itemIndex].json;\nconst text = anth.content && anth.content[0] && anth.content[0].text ? anth.content[0].text : JSON.stringify(anth);\nconst z = base._readiness;\nconst now = new Date().toISOString().slice(0, 10);\nconst tracker = {\n  'Assessment Date': now,\n  'Company': base['Company Name'],\n  'TRN': base['TRN Number'],\n  'Phase': z.phaseLabel,\n  'Readiness Score': z.score,\n  'Urgency': z.urgency,\n  'Critical Gaps': z.criticalGaps,\n  'High Gaps': z.highGaps,\n  'Days to ASP Deadline': z.daysAsp,\n  'Days to Go-Live': z.daysLive,\n  'Est Cost Low AED': z.costLow,\n  'Est Cost High AED': z.costHigh,\n  'Penalty Exposure AED': z.penaltyExposure,\n  'ASP Appointed': base['ASP Appointed'],\n  'ASP Name': base['ASP Name'] || '',\n  'Status': 'DONE',\n};\nreturn [{ json: { intake: base, readiness: z, advisory_text: text, tracker, emailTo: base['CFO Email'], advisorCc: base['Tax Advisor Email'] || '', slackChannel: base['Slack Channel'] } }];"
+      },
+      "id": "fb6a6039-e7ae-4921-9c79-7ba9a7ecda60",
+      "name": "Compile Tracker + Email Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Set Sheet IDs').first().json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "E-Invoicing Tracker",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Assessment Date": "={{ $json.tracker['Assessment Date'] }}",
+            "Company": "={{ $json.tracker.Company }}",
+            "TRN": "={{ $json.tracker.TRN }}",
+            "Phase": "={{ $json.tracker.Phase }}",
+            "Readiness Score": "={{ $json.tracker['Readiness Score'] }}",
+            "Urgency": "={{ $json.tracker.Urgency }}",
+            "Critical Gaps": "={{ $json.tracker['Critical Gaps'] }}",
+            "High Gaps": "={{ $json.tracker['High Gaps'] }}",
+            "Days to ASP Deadline": "={{ $json.tracker['Days to ASP Deadline'] }}",
+            "Days to Go-Live": "={{ $json.tracker['Days to Go-Live'] }}",
+            "Est Cost Low AED": "={{ $json.tracker['Est Cost Low AED'] }}",
+            "Est Cost High AED": "={{ $json.tracker['Est Cost High AED'] }}",
+            "Penalty Exposure AED": "={{ $json.tracker['Penalty Exposure AED'] }}",
+            "ASP Appointed": "={{ $json.tracker['ASP Appointed'] }}",
+            "ASP Name": "={{ $json.tracker['ASP Name'] }}",
+            "Status": "={{ $json.tracker.Status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "09f52e62-7407-40db-a26d-aaa827218b5d",
+      "name": "Append Tracker Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1540,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.emailTo }}",
+        "subject": "=UAE E-Invoicing Readiness \u2014 {{ $json.intake['Company Name'] }}",
+        "message": "={{ $json.advisory_text }}",
+        "options": {
+          "ccList": "={{ $json.advisorCc }}"
+        }
+      },
+      "id": "ea278606-794c-461a-b4ff-f891f631f897",
+      "name": "Email CFO + Tax Advisor",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.slackChannel }}",
+          "mode": "name"
+        },
+        "text": "={{ '*UAE E-Invoicing Readiness*\\n' + $json.intake['Company Name'] + ' \u2014 Score ' + $json.readiness.score + '/100 (' + $json.readiness.urgency + ')' }}",
+        "otherOptions": {}
+      },
+      "id": "ff5ec64b-61ad-4656-aa79-9c2a3e3196f7",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.GULFTAX_API_URL || 'http://127.0.0.1:8000') + '/api/automations/n8n/inbound/einvoicing_assessed' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Signature",
+              "value": "={{ $env.GULFTAX_N8N_SECRET }}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ event: 'einvoicing_assessed', company: $json.intake['Company Name'], trn: $json.intake['TRN Number'], readiness: $json.readiness, advisory: $json.advisory_text }) }}"
+      },
+      "id": "e33dff8c-b8f4-42bb-bc0c-4a4621ae7522",
+      "name": "GulfTax Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        440
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "content": "## UAE E-Invoicing Readiness\n- Replace sheet ID + Anthropic key in nodes (or use credentials).\n- Model: **claude-opus-4-7** via HTTP Messages API.\n- Filter keeps **Status = READY** rows.\n- Webhook disabled until Prompt 11 HMAC is implemented.",
+        "height": 320,
+        "width": 400
+      },
+      "id": "5ed5aea6-a94c-43f2-a943-c5aefd1a96fb",
+      "name": "Sticky \u2014 Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -200
+      ]
+    }
+  ],
+  "connections": {
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Set Sheet IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Sheet IDs": {
+      "main": [
+        [
+          {
+            "node": "Read Intake Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set API Constants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set API Constants": {
+      "main": [
+        []
+      ]
+    },
+    "Read Intake Sheet": {
+      "main": [
+        [
+          {
+            "node": "Calculate E-Invoicing Readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate E-Invoicing Readiness": {
+      "main": [
+        [
+          {
+            "node": "Filter Status READY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Status READY": {
+      "main": [
+        [
+          {
+            "node": "Claude Advisory (Opus 4.7)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Advisory (Opus 4.7)": {
+      "main": [
+        [
+          {
+            "node": "Compile Tracker + Email Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Tracker + Email Payload": {
+      "main": [
+        [
+          {
+            "node": "Append Tracker Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email CFO + Tax Advisor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GulfTax Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

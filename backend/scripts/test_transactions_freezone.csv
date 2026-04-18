@@ -1,0 +1,31 @@
+date,description,vendor_or_customer,invoice_number,amount_aed,vat_treatment,vat_amount_aed,transaction_type
+2025-01-18,Supply to JAFZA company,JAFZA Trading LLC,INV-20250118-7912,50862.54,standard_rated,2543.13,sale
+2025-01-10,Supply from DMCC company - Same zone,DMCC Logistics FZE,INV-20250110-8260,74018.46,out_of_scope,0.0,purchase
+2025-03-11,Internet services,Etisalat,INV-20250311-1241,26666.05,standard_rated,1333.3,purchase
+2025-01-22,Supply from mainland - Raw materials,Dubai Trading House,INV-20250122-7658,198542.85,zero_rated,0.0,purchase
+2025-02-21,Office rent - DMCC,DMCC Properties,INV-20250221-1960,36546.21,standard_rated,1827.31,purchase
+2025-02-19,Supply from DMCC company - Same zone,DMCC Logistics FZE,INV-20250219-5345,100345.0,out_of_scope,0.0,purchase
+2025-03-13,Trading goods to mainland,Emaar Properties,INV-20250313-8973,75776.42,standard_rated,3788.82,sale
+2025-01-08,Supply to DMCC company - Same zone,DMCC Services FZE,INV-20250108-9883,50780.3,out_of_scope,0.0,sale
+2025-01-07,Supply from mainland - Trading goods,Emirates Trading Company,INV-20250107-8811,197077.31,zero_rated,0.0,purchase
+2025-03-07,Utilities - DEWA,DEWA,INV-20250307-2312,39807.16,standard_rated,1990.36,purchase
+2025-03-28,Supply from DMCC company - Same zone,DMCC Logistics FZE,INV-20250328-4853,18962.6,out_of_scope,0.0,purchase
+2025-03-14,Export to Qatar,Qatar Business Solutions,INV-20250314-5033,32427.94,zero_rated,0.0,sale
+2025-01-11,AWS cloud services,Amazon Web Services (Ireland),INV-20250111-7868,20481.04,reverse_charge,1024.05,purchase
+2025-02-10,Dividend payment,Shareholder Distribution,INV-20250210-5272,96503.57,out_of_scope,0.0,sale
+2025-01-31,Supply to JAFZA company,JAFZA Trading LLC,INV-20250131-5351,176564.72,standard_rated,8828.24,sale
+2025-02-08,Export to Qatar,Qatar Business Solutions,INV-20250208-8491,35308.67,zero_rated,0.0,sale
+2025-01-02,Export to Saudi Arabia,Saudi Trader Co.,INV-20250102-8508,198096.94,zero_rated,0.0,sale
+2025-01-10,Microsoft Azure,Microsoft Ireland Operations Ltd,INV-20250110-9808,148586.0,reverse_charge,7429.3,purchase
+2025-02-14,Supply to JAFZA company,JAFZA Trading LLC,INV-20250214-2127,133614.27,standard_rated,6680.71,sale
+2025-02-26,Supply from DIFC company,DIFC Financial Services,INV-20250226-9900,97869.28,standard_rated,4893.46,purchase
+2025-03-25,Supply to mainland - Services,Emirates Trading Company,INV-20250325-9666,161347.98,standard_rated,8067.4,sale
+2025-02-08,Supply from mainland - Office equipment,Al Futtaim LLC,INV-20250208-2697,176076.82,zero_rated,0.0,purchase
+2025-01-14,Supply to DMCC company - Same zone,DMCC Services FZE,INV-20250114-3546,70328.12,out_of_scope,0.0,sale
+2025-02-13,Supply to mainland - Trading goods,Al Futtaim LLC,INV-20250213-4335,74860.6,standard_rated,3743.03,sale
+2025-03-06,Dividend payment,Shareholder Distribution,INV-20250306-9004,103130.85,out_of_scope,0.0,sale
+2025-02-24,Supply to mainland - Trading goods,Al Futtaim LLC,INV-20250224-5533,14316.09,standard_rated,715.8,sale
+2025-01-17,Supply from mainland - Trading goods,Emirates Trading Company,INV-20250117-5291,1929.33,zero_rated,0.0,purchase
+2025-02-24,Supply from DMCC company - Same zone,DMCC Logistics FZE,INV-20250224-1158,195309.44,out_of_scope,0.0,purchase
+2025-03-30,Supply to DMCC company - Same zone,DMCC Trading LLC,INV-20250330-3442,20724.95,out_of_scope,0.0,sale
+2025-03-16,Internet services,Etisalat,INV-20250316-3426,10444.83,standard_rated,522.24,purchase

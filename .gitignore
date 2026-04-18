@@ -1,0 +1,65 @@
+# dependencies
+/node_modules
+/.pydata-cache
+/__pycache__
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+frontend/.next/
+frontend/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+backend/.env
+frontend/.env.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# python
+*.pyc
+__pycache__/
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# database
+*.db
+*.sqlite
+*.sqlite3
+
+# chromadb
+rag/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

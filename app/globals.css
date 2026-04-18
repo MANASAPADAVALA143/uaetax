@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gold: #c9a84c;
+  --gold-lt: #e8c96a;
+  --gold-pale: rgba(201, 168, 76, 0.12);
+  --deep: #040d1f;
+  --navy: #071226;
+  --card: #0a1a35;
+  --card2: #0e2040;
+  --border: rgba(78, 168, 255, 0.12);
+  --border-g: rgba(201, 168, 76, 0.22);
+  --white: #ffffff;
+  --muted: #7a9bb5;
+  --muted2: #3a5070;
+  --green: #2dd4a0;
+  --blue: #4ea8ff;
+  --blue-bright: #60bfff;
+  --red: #ff6b6b;
+  --amber: #ffa940;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-dm-sans), sans-serif;
+  background: linear-gradient(
+    160deg,
+    #040d1f 0%,
+    #071530 40%,
+    #050f28 70%,
+    #030b1a 100%
+  );
+  color: var(--white);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(40px, -30px) scale(1.05);
+  }
+  66% {
+    transform: translate(-20px, 40px) scale(0.95);
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    background-position: 0%;
+  }
+  50% {
+    background-position: 100%;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

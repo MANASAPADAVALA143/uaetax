@@ -1,0 +1,51 @@
+date,description,vendor_or_customer,invoice_number,amount_aed,vat_treatment,vat_amount_aed,transaction_type
+2025-02-05,Trading goods - Textiles,Dubai Textile Trading,INV-20250205-5012,29684.03,standard_rated,1484.2,sale
+2025-03-28,Marketing services,Publicis Groupe UAE,INV-20250328-9935,37079.74,standard_rated,1853.99,sale
+2025-01-04,Consulting services - Tax advisory,Deloitte UAE,INV-20250104-2535,155294.42,standard_rated,7764.72,sale
+2025-01-04,Marketing services,Publicis Groupe UAE,INV-20250104-4257,61490.51,standard_rated,3074.53,sale
+2025-02-23,Warehouse services,DP World Logistics,INV-20250223-4611,170863.7,standard_rated,8543.19,sale
+2025-01-01,Equipment rental,Al Tayer Rentals,INV-20250101-3615,154972.28,standard_rated,7748.61,sale
+2025-01-20,Warehouse services,DP World Logistics,INV-20250120-4527,111285.34,standard_rated,5564.27,sale
+2025-02-18,Cleaning services,Emirates Cleaning Services,INV-20250218-2584,88736.1,standard_rated,4436.81,sale
+2025-02-03,IT support services,Emirates Computers,INV-20250203-1711,222665.34,standard_rated,11133.27,sale
+2025-02-18,Warehouse services,DP World Logistics,INV-20250218-2291,120935.54,standard_rated,6046.78,sale
+2025-03-21,Professional services,PwC Middle East,INV-20250321-6925,77354.83,standard_rated,3867.74,sale
+2025-01-06,Software license - Local,Emirates Software Solutions,INV-20250106-4733,50907.7,standard_rated,2545.39,sale
+2025-01-30,Cleaning services,Emirates Cleaning Services,INV-20250130-2654,76361.99,standard_rated,3818.1,sale
+2025-02-16,Office supplies,Office Depot UAE,INV-20250216-3664,73369.45,standard_rated,3668.47,sale
+2025-02-04,IT support services,Emirates Computers,INV-20250204-2169,93632.21,standard_rated,4681.61,sale
+2025-01-21,Export to Qatar - Machinery,Qatar Business Solutions,INV-20250121-8573,140521.73,zero_rated,0.0,sale
+2025-03-23,Export to Bahrain - Electronics,Bahrain Trading House,INV-20250323-4598,71265.99,zero_rated,0.0,sale
+2025-01-08,Export to Oman - Consumer goods,Oman Commercial LLC,INV-20250108-4752,221448.77,zero_rated,0.0,sale
+2025-02-04,Export to Saudi Arabia - Electronics,Saudi Trader Co.,INV-20250204-2084,211537.32,zero_rated,0.0,sale
+2025-02-10,International freight - Sea,DP World Shipping,INV-20250210-4483,239873.94,zero_rated,0.0,sale
+2025-03-24,International transport services,DHL Express UAE,INV-20250324-8517,104212.88,zero_rated,0.0,sale
+2025-03-13,Export to Qatar - Machinery,Qatar Business Solutions,INV-20250313-9830,69936.14,zero_rated,0.0,sale
+2025-03-16,International freight - Air,Emirates SkyCargo,INV-20250316-7543,196325.58,zero_rated,0.0,sale
+2025-01-18,Local passenger transport,Dubai Taxi Corporation,INV-20250118-9348,57994.0,exempt,0.0,sale
+2025-01-15,Local passenger transport,Careem UAE,INV-20250115-3504,24331.76,exempt,0.0,sale
+2025-03-18,Bare land rental - Abu Dhabi,Aldar Properties,INV-20250318-2040,208138.68,exempt,0.0,sale
+2025-03-01,Local passenger transport,Careem UAE,INV-20250301-9669,100539.6,exempt,0.0,sale
+2025-01-02,Local passenger transport,Dubai Taxi Corporation,INV-20250102-2876,145524.86,exempt,0.0,sale
+2025-03-24,Marketing agency services,Publicis Groupe UAE,INV-20250324-6573,197338.27,standard_rated,9866.91,purchase
+2025-02-28,Office rent - Business Bay,Dubai Properties Group,INV-20250228-1053,77439.43,standard_rated,3871.97,purchase
+2025-03-06,Internet services,Etisalat,INV-20250306-2743,131725.76,standard_rated,6586.29,purchase
+2025-03-19,Internet services,Etisalat,INV-20250319-4258,221138.64,standard_rated,11056.93,purchase
+2025-03-11,Electricity bill,DEWA,INV-20250311-9689,98519.76,standard_rated,4925.99,purchase
+2025-01-03,Office rent - Dubai Marina,Emaar Properties,INV-20250103-2832,157509.32,standard_rated,7875.47,purchase
+2025-02-09,Telephone services,du Telecom,INV-20250209-4923,230851.99,standard_rated,11542.6,purchase
+2025-01-11,Office rent - Dubai Marina,Emaar Properties,INV-20250111-2403,63643.88,standard_rated,3182.19,purchase
+2025-03-10,Supplier invoice - Trading goods,Emirates Trading Company,INV-20250310-3060,214415.07,standard_rated,10720.75,purchase
+2025-03-12,Electricity bill,DEWA,INV-20250312-3705,173449.48,standard_rated,8672.47,purchase
+2025-02-24,Salesforce CRM subscription,Salesforce.com EMEA,INV-20250224-4470,36581.87,reverse_charge,1829.09,purchase
+2025-03-27,Oracle database license,Oracle Corporation,INV-20250327-7118,48723.31,reverse_charge,2436.17,purchase
+2025-02-01,Slack Enterprise subscription,Slack Technologies,INV-20250201-4681,35919.45,reverse_charge,1795.97,purchase
+2025-03-12,AWS cloud services,Amazon Web Services (Ireland),INV-20250312-4770,24156.02,reverse_charge,1207.8,purchase
+2025-03-22,Oracle database license,Oracle Corporation,INV-20250322-1964,2471.07,reverse_charge,123.55,purchase
+2025-02-12,Salary payment - February 2025,Payroll Batch,INV-20250212-2160,27668.91,out_of_scope,0.0,sale
+2025-03-04,Intercompany loan repayment,Parent Company LLC,INV-20250304-4510,72391.28,out_of_scope,0.0,sale
+2025-03-15,Intercompany loan repayment,Parent Company LLC,INV-20250315-8744,44684.72,out_of_scope,0.0,sale
+2025-01-25,Salary payment - February 2025,Payroll Batch,INV-20250125-2545,133987.81,out_of_scope,0.0,sale
+2025-02-24,Salary payment - January 2025,Payroll Batch,INV-20250224-7735,182748.43,out_of_scope,0.0,sale
+2025-03-24,Dividend payment to shareholders,Shareholder Distribution,INV-20250324-2612,24200.67,out_of_scope,0.0,sale
+2025-01-14,Salary payment - January 2025,Payroll Batch,INV-20250114-5073,115544.73,out_of_scope,0.0,sale
