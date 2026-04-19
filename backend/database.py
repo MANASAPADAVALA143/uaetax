@@ -1,11 +1,14 @@
 """Database configuration and session management"""
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Load backend/.env regardless of process cwd (e.g. uvicorn run from repo root).
+load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/gulftax_ai")
 

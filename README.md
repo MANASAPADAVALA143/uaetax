@@ -137,23 +137,13 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## API Endpoints
 
-### POST `/api/vat/classify`
-Upload CSV/Excel file for batch VAT classification.
+### POST `/api/vat/classify-bulk`
 
-**Request**: Multipart form data with file
-**Response**: JSON with classifications array
+Upload CSV/Excel for batch classification (`company_id` and other params as query string). Response includes `summary.classifications` with snake_case `vat_treatment` values.
 
-### POST `/api/vat/classify-single`
-Classify a single transaction.
+### POST `/api/vat/classify-transaction`
 
-**Request**: JSON
-```json
-{
-  "description": "Office furniture supply",
-  "vendor": "Al Futtaim LLC",
-  "amount": "52500"
-}
-```
+Classify a single transaction (JSON body with `company_id`, `description`, `amount_aed`, `transaction_type`, `entity_type`, etc.). See `backend/API_DOCUMENTATION.md`.
 
 ## RAG (Vector Store)
 

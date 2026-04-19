@@ -21,8 +21,16 @@ export default function DashboardLayout({
     { id: "recon", label: "Recon Bot", icon: "🔍", href: "/dashboard/recon" },
   ];
 
-  const complianceItems = [
-    { id: "corporate-tax", label: "Corporate Tax", icon: "🏛️", href: "#", coming: "New" },
+  type ComplianceNavItem = {
+    id: string;
+    label: string;
+    icon: string;
+    href: string;
+    coming?: string;
+  };
+
+  const complianceItems: ComplianceNavItem[] = [
+    { id: "corporate-tax", label: "Corporate Tax", icon: "🏛️", href: "/dashboard/corporate-tax" },
     { id: "esr", label: "ESR Filing", icon: "⚖️", href: "#", coming: "Soon" },
     { id: "transfer-pricing", label: "Transfer Pricing", icon: "🌐", href: "#", coming: "Soon" },
     { id: "cbcr", label: "CbCR Report", icon: "📑", href: "#", coming: "Soon" },
@@ -65,21 +73,28 @@ export default function DashboardLayout({
           <div className="text-[10px] uppercase tracking-[0.12em] text-muted2 font-mono px-3 pt-2.5 pb-1.5 mt-2">
             Compliance
           </div>
-          {complianceItems.map((item) => (
-            <Link
-              key={item.id}
-              href={item.href}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] cursor-pointer text-[13px] font-medium text-muted transition-all select-none hover:bg-[rgba(30,70,150,0.25)] hover:text-white"
-            >
-              <span className="text-base flex-shrink-0">{item.icon}</span>
-              {item.label}
-              {item.coming && (
-                <span className="ml-auto text-[9px] bg-[rgba(255,255,255,0.07)] text-muted2 px-1.5 py-0.5 rounded-full font-mono uppercase tracking-wide">
-                  {item.coming}
-                </span>
-              )}
-            </Link>
-          ))}
+          {complianceItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] cursor-pointer text-[13px] font-medium transition-all select-none ${
+                  isActive
+                    ? "bg-gold-pale text-gold-lt border border-border-g"
+                    : "text-muted hover:bg-[rgba(30,70,150,0.25)] hover:text-white"
+                }`}
+              >
+                <span className="text-base flex-shrink-0">{item.icon}</span>
+                {item.label}
+                {item.coming && (
+                  <span className="ml-auto text-[9px] bg-[rgba(255,255,255,0.07)] text-muted2 px-1.5 py-0.5 rounded-full font-mono uppercase tracking-wide">
+                    {item.coming}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
 
           <div className="text-[10px] uppercase tracking-[0.12em] text-muted2 font-mono px-3 pt-2.5 pb-1.5 mt-2">
             Reports

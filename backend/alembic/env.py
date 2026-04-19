@@ -31,8 +31,13 @@ target_metadata = Base.metadata
 def get_url():
     """Get database URL from environment variable"""
     import os
+    from pathlib import Path
+
     from dotenv import load_dotenv
-    load_dotenv()
+
+    # Always load backend/.env (not cwd), so `alembic` works from any directory.
+    backend_root = Path(__file__).resolve().parent.parent
+    load_dotenv(backend_root / ".env", override=True)
     return os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/gulftax_ai")
 
 

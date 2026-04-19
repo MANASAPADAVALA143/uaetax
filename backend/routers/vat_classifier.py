@@ -30,16 +30,14 @@ from models import Transaction, Company, AuditLog
 load_dotenv()
 
 router = APIRouter(prefix="/api/vat", tags=["VAT Classification"])
+# Classification: POST /classify-transaction (single JSON) and POST /classify-bulk (multipart file) only.
 
 # Temp Excel files from bulk classify (job_id -> absolute path)
 _BULK_CLASSIFY_EXCEL_PATHS: Dict[str, str] = {}
 
-# Initialize Claude client
+# Initialize Claude client (optional at startup — same pattern as vat_return)
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-if not anthropic_api_key:
-    raise ValueError("ANTHROPIC_API_KEY environment variable is required")
-
-claude_client = Anthropic(api_key=anthropic_api_key)
+claude_client = Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
 
 # Initialize RAG system
 rag = UAETaxRAG() if RAG_AVAILABLE else None
@@ -126,6 +124,12 @@ def classify_with_claude_and_rag(
 
     Returns classification result with all required fields including rag_citations.
     """
+    if claude_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY is not configured. Add it to backend/.env to use AI classification.",
+        )
+
     rag_results: List[Dict[str, Any]] = []
     rag_citations: List[str] = []
     rag_context = "RAG system not available."

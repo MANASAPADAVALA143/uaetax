@@ -120,7 +120,7 @@
     - Actions (Edit button)
 
 - **Color Coding:**
-  - 🟢 **Green** = Standard Rated (5%)
+  - 🟢 **Green** = `standard_rated` (5% standard rate)
   - 🔵 **Blue** = Zero Rated (0%)
   - 🟡 **Yellow** = Exempt
   - ⚪ **Gray** = Out of Scope

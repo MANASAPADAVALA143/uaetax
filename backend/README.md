@@ -32,40 +32,25 @@ npm run backend
 
 ## API Endpoints
 
-### POST `/api/vat/classify`
-Upload CSV/Excel file with transactions. Returns classifications.
+See `API_DOCUMENTATION.md` for full detail. Summary:
 
-**Expected file format:**
-- Description column (required)
-- Vendor/Supplier column (optional)
-- Amount column (required)
+### POST `/api/vat/classify-transaction`
 
-**Response:**
-```json
-{
-  "status": "success",
-  "count": 10,
-  "classifications": [
-    {
-      "description": "Office furniture supply",
-      "vendor": "Al Futtaim LLC",
-      "amount": "52500",
-      "vat_treatment": "Standard Rated (5%)",
-      "confidence": 99,
-      "reasoning": "Office furniture is standard rated in UAE mainland"
-    }
-  ]
-}
-```
+Classify one transaction (JSON body, persists to DB).
 
-### POST `/api/vat/classify-single`
-Classify a single transaction.
+### POST `/api/vat/classify-bulk`
 
-**Request:**
+Upload CSV/Excel (`multipart/form-data` + query `company_id`, optional `entity_type`, `transaction_type`). Returns `summary.classifications` with `vat_treatment` as snake_case (e.g. `standard_rated`, `reverse_charge`).
+
+**Example classification row:**
+
 ```json
 {
   "description": "Office furniture supply",
-  "vendor": "Al Futtaim LLC",
-  "amount": "52500"
+  "vendor_or_customer": "Al Futtaim LLC",
+  "amount_aed": 52500,
+  "vat_treatment": "standard_rated",
+  "confidence": 0.99,
+  "reasoning": "Office furniture is standard rated in UAE mainland"
 }
 ```

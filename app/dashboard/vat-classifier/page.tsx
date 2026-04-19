@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import axios from "axios";
 
+const COMPANY_ID = 1;
+
 interface ClassificationResult {
   description: string;
   vendor?: string;
@@ -41,7 +43,7 @@ export default function VATClassifier() {
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await axios.post(
-        `${apiUrl}/api/vat/classify`,
+        `${apiUrl}/api/vat/classify-bulk?company_id=${COMPANY_ID}&entity_type=mainland&transaction_type=sale`,
         formData,
         {
           headers: {
@@ -50,7 +52,20 @@ export default function VATClassifier() {
         }
       );
 
-      setResults(response.data.classifications || []);
+      const raw = response.data.summary?.classifications || [];
+      setResults(
+        raw.map((c: Record<string, unknown>) => ({
+          description: String(c.description ?? ""),
+          vendor: c.vendor_or_customer ? String(c.vendor_or_customer) : "",
+          amount:
+            typeof c.amount_aed === "number"
+              ? c.amount_aed.toLocaleString("en-AE", { minimumFractionDigits: 2 })
+              : String(c.amount_aed ?? ""),
+          vat_treatment: String(c.vat_treatment ?? "standard_rated"),
+          confidence: Math.round(Number(c.confidence ?? 0) * 100),
+          reasoning: c.reasoning ? String(c.reasoning) : undefined,
+        }))
+      );
     } catch (err: any) {
       setError(
         err.response?.data?.detail || "Failed to classify transactions. Please try again."
@@ -62,22 +77,19 @@ export default function VATClassifier() {
   };
 
   const getTreatmentClass = (treatment: string) => {
-    if (treatment.includes("Standard") || treatment.includes("5%")) {
-      return "pill-std";
+    switch (treatment) {
+      case "standard_rated":
+      case "reverse_charge":
+        return "pill-std";
+      case "zero_rated":
+        return "pill-zero";
+      case "exempt":
+        return "pill-ex";
+      case "out_of_scope":
+        return "pill-oos";
+      default:
+        return "pill-flag";
     }
-    if (treatment.includes("Zero")) {
-      return "pill-zero";
-    }
-    if (treatment.includes("Exempt")) {
-      return "pill-ex";
-    }
-    if (treatment.includes("Review") || treatment.includes("⚠")) {
-      return "pill-flag";
-    }
-    if (treatment.includes("Out of Scope") || treatment.includes("OOS")) {
-      return "pill-oos";
-    }
-    return "pill-std";
   };
 
   const getConfidenceClass = (confidence: number) => {

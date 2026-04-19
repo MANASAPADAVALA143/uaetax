@@ -128,7 +128,7 @@ from rag.uae_tax_rag import UAETaxRAG
 
 rag = UAETaxRAG()
 
-@app.post("/api/vat/classify-with-rag")
+@app.post("/api/vat/classify-transaction")
 async def classify_with_rag(transaction: dict):
     # Get company entity type from database
     company = db.query(Company).filter(Company.id == transaction["company_id"]).first()
