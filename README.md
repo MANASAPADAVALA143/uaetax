@@ -16,10 +16,8 @@
 
 ```
 gulftax-ai/
-├── frontend/          # Next.js 14 application
-│   ├── app/           # App router pages
-│   ├── components/    # React components
-│   └── package.json
+├── app/               # Next.js 14 application (App Router, repo root)
+├── components/        # Shared React components
 ├── backend/           # FastAPI application
 │   ├── main.py        # FastAPI app
 │   ├── models.py      # SQLAlchemy models
@@ -79,17 +77,16 @@ cp .env.example .env
 
 ### 4. Frontend Setup
 
+From the **repository root** (where `package.json` is):
+
 ```bash
-cd frontend
-
-# Install dependencies
 npm install
+```
 
-# Create .env.local file
-cp .env.example .env.local
+Optional `.env.local` in the repo root:
 
-# Edit .env.local:
-# NEXT_PUBLIC_API_URL=http://localhost:8000
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ## Running the Application
@@ -107,7 +104,6 @@ Backend will be available at `http://localhost:8000`
 ### Start Frontend
 
 ```bash
-cd frontend
 npm run dev
 ```
 
@@ -123,7 +119,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/gulftax_ai
 FTA_API_KEY=your_fta_api_key_here
 ```
 
-### Frontend (.env.local)
+### Frontend (`.env.local` at repo root)
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -176,8 +172,7 @@ alembic upgrade head
 cd backend
 pytest  # (when tests are added)
 
-# Frontend
-cd frontend
+# Frontend (repo root)
 npm test  # (when tests are added)
 ```
 

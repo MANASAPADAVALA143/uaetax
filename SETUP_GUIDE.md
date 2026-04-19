@@ -61,18 +61,13 @@ cp env_template.txt .env
 
 ### 4. Frontend Setup
 
+From the **repository root**:
+
 ```bash
-cd frontend
-
-# Install dependencies
 npm install
-
-# Create .env.local file
-cp .env.example .env.local
-
-# Edit .env.local:
-# NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
+
+Optional `.env.local` in the repo root with `NEXT_PUBLIC_API_URL=http://localhost:8000`.
 
 ### 5. Run the Application
 
@@ -85,7 +80,6 @@ uvicorn main:app --reload --port 8000
 
 **Terminal 2 - Frontend:**
 ```bash
-cd frontend
 npm run dev
 ```
 
@@ -115,14 +109,9 @@ npm run dev
 
 ```
 gulftax-ai/
-├── frontend/
-│   ├── app/              # Next.js app router
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   └── globals.css
-│   ├── components/        # React components
-│   ├── package.json
-│   └── .env.local        # Frontend env vars
+├── app/                   # Next.js app router (repo root)
+├── components/            # React components
+├── package.json
 ├── backend/
 │   ├── main.py           # FastAPI application
 │   ├── models.py         # SQLAlchemy models
@@ -192,8 +181,7 @@ uvicorn main:app --reload          # Development server
 alembic upgrade head               # Run migrations
 alembic revision --autogenerate   # Create migration
 
-# Frontend
-cd frontend
+# Frontend (repo root)
 npm run dev                        # Development server
 npm run build                      # Production build
 npm run start                      # Production server

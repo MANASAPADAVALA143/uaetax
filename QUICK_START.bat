@@ -1,5 +1,6 @@
 @echo off
 REM GulfTax AI Quick Start Script for Windows
+cd /d %~dp0
 
 echo.
 echo ========================================
@@ -51,8 +52,7 @@ cd ..
 
 REM Frontend setup
 echo.
-echo 3. Setting up frontend...
-cd frontend
+echo 3. Setting up frontend (repo root)...
 
 if not exist .env.local (
     echo    Creating .env.local...
@@ -65,7 +65,6 @@ if not exist node_modules (
 )
 
 echo    [OK] Frontend ready
-cd ..
 
 REM Test data check
 echo.
@@ -86,7 +85,7 @@ echo ========================================
 echo.
 echo Next steps:
 echo 1. Start backend:  cd backend ^&^& venv\Scripts\activate ^&^& uvicorn main:app --reload
-echo 2. Start frontend: cd frontend ^&^& npm run dev
+echo 2. Start frontend: npm run dev  (from repo root)
 echo 3. Open browser:   http://localhost:3000/dashboard
 echo.
 echo Test: Upload backend\scripts\test_transactions.csv

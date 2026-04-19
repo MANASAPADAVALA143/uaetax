@@ -18,17 +18,19 @@ uvicorn main:app --reload --port 8000
 
 ### Terminal 2 - Frontend (Next.js)
 ```bash
-cd frontend
 npm install
 npm run dev
 ```
+(Run from the **repository root**, where `package.json` lives.)
 
 **Frontend will be at:**
 - Dashboard: http://localhost:3000/dashboard
 - Home Page: http://localhost:3000
 - VAT Classifier: http://localhost:3000/dashboard/vat-classifier
 - VAT Return: http://localhost:3000/dashboard/vat-return
-- Reconciliation: http://localhost:3000/dashboard/reconciliation
+- Recon Bot: http://localhost:3000/dashboard/recon
+- Corporate Tax: http://localhost:3000/dashboard/corporate-tax
+- E-Invoicing: http://localhost:3000/dashboard/e-invoicing
 
 ## All Localhost URLs
 
@@ -37,7 +39,9 @@ npm run dev
 - **Dashboard:** http://localhost:3000/dashboard
 - **VAT Classifier:** http://localhost:3000/dashboard/vat-classifier
 - **VAT Return:** http://localhost:3000/dashboard/vat-return
-- **Reconciliation:** http://localhost:3000/dashboard/reconciliation
+- **Recon Bot:** http://localhost:3000/dashboard/recon
+- **Corporate Tax:** http://localhost:3000/dashboard/corporate-tax
+- **E-Invoicing:** http://localhost:3000/dashboard/e-invoicing
 - **Settings:** http://localhost:3000/dashboard/settings
 
 ### Backend API (Port 8000)
@@ -62,7 +66,7 @@ Create `start.bat`:
 @echo off
 start "Backend" cmd /k "cd backend && venv\Scripts\activate && uvicorn main:app --reload --port 8000"
 timeout /t 3
-start "Frontend" cmd /k "cd frontend && npm run dev"
+start "Frontend" cmd /k "cd /d %~dp0 && npm run dev"
 ```
 
 Then just run: `start.bat`
@@ -74,7 +78,7 @@ Create `start.sh`:
 #!/bin/bash
 cd backend && source venv/bin/activate && uvicorn main:app --reload --port 8000 &
 sleep 3
-cd frontend && npm run dev
+cd "$(dirname "$0")" && npm run dev
 ```
 
 Then: `chmod +x start.sh && ./start.sh`

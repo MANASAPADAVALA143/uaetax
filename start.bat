@@ -8,7 +8,7 @@ start "GulfTax Backend" cmd /k "cd backend && if exist venv\Scripts\activate.bat
 timeout /t 3 /nobreak >nul
 
 echo Starting Frontend (Port 3000)...
-start "GulfTax Frontend" cmd /k "cd frontend && npm run dev"
+start "GulfTax Frontend" cmd /k "cd /d %~dp0 && npm run dev"
 
 echo.
 echo ========================================

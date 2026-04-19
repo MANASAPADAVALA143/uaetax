@@ -32,11 +32,8 @@ cp env_template.txt .env
 
 **Frontend:**
 ```bash
-cd frontend
 npm install
-
-# Create .env.local
-echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+# Optional: echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 ```
 
 **Database:**
@@ -60,7 +57,6 @@ uvicorn main:app --reload --port 8000
 
 **Terminal 2 - Frontend:**
 ```bash
-cd frontend
 npm run dev
 ```
 
@@ -190,7 +186,7 @@ alembic upgrade head
 
 - Verify backend is running: http://localhost:8000/health
 - Check CORS settings in `backend/main.py`
-- Verify `NEXT_PUBLIC_API_URL` in frontend `.env.local`
+- Verify `NEXT_PUBLIC_API_URL` in `.env.local` at the repo root (if used)
 
 ## 📊 Expected Test Results
 

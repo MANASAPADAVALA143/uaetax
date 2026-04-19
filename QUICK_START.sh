@@ -61,11 +61,9 @@ alembic upgrade head
 echo "   ✅ Backend ready"
 cd ..
 
-# Frontend setup
+# Frontend setup (repo root)
 echo ""
 echo "4. Setting up frontend..."
-cd frontend
-
 if [ ! -f .env.local ]; then
     echo "   Creating .env.local..."
     echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
@@ -77,7 +75,6 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "   ✅ Frontend ready"
-cd ..
 
 # Test data check
 echo ""
@@ -98,7 +95,7 @@ echo "✅ Setup Complete!"
 echo ""
 echo "Next steps:"
 echo "1. Start backend:  cd backend && source venv/bin/activate && uvicorn main:app --reload"
-echo "2. Start frontend: cd frontend && npm run dev"
+echo "2. Start frontend: npm run dev   (from repo root)"
 echo "3. Open browser:   http://localhost:3000/dashboard"
 echo ""
 echo "Test: Upload backend/scripts/test_transactions.csv"

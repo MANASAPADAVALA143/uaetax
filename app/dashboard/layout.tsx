@@ -14,8 +14,29 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [activeNav, setActiveNav] = useState("overview");
 
-  const navItems = [
+  type MainNavItem = {
+    id: string;
+    label: string;
+    icon: string;
+    href: string;
+    mandateCountdown?: boolean;
+  };
+
+  const mandateJan2027 = new Date("2027-01-01T00:00:00+04:00");
+  const daysToPhase1Mandate = Math.max(
+    0,
+    Math.ceil((mandateJan2027.getTime() - Date.now()) / 86400000)
+  );
+
+  const navItems: MainNavItem[] = [
     { id: "overview", label: "Overview", icon: "🏠", href: "/dashboard" },
+    {
+      id: "e-invoicing",
+      label: "E-Invoicing",
+      icon: "📧",
+      href: "/dashboard/e-invoicing",
+      mandateCountdown: true,
+    },
     { id: "vat-classifier", label: "VAT Classifier", icon: "📊", href: "/dashboard/vat-classifier" },
     { id: "vat-return", label: "VAT Return", icon: "📋", href: "/dashboard/vat-return" },
     { id: "recon", label: "Recon Bot", icon: "🔍", href: "/dashboard/recon" },
@@ -66,6 +87,14 @@ export default function DashboardLayout({
               >
                 <span className="text-base flex-shrink-0">{item.icon}</span>
                 {item.label}
+                {item.mandateCountdown && (
+                  <span
+                    className="ml-auto text-[9px] font-mono tabular-nums bg-[rgba(255,107,107,0.18)] text-red border border-red/35 px-1.5 py-0.5 rounded-full"
+                    title="Days until Phase 1 e-invoicing go-live (1 Jan 2027)"
+                  >
+                    {daysToPhase1Mandate}d
+                  </span>
+                )}
               </Link>
             );
           })}

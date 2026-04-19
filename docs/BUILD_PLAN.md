@@ -57,7 +57,7 @@ If you maintain a longer master spec (e.g. `gulftax_build_plan.md`), either merg
 | Path | Role |
 |------|------|
 | `backend/` | FastAPI, routers, models, Alembic |
-| `frontend/` | Next.js app (primary UI) |
+| `app/`, `components/` (repo root) | Next.js app (primary UI) |
 | `rag/` | UAE tax RAG |
 | `n8n/workflows/` | Importable n8n JSON (`UAE_EInvoicing_Readiness.json`) |
 | `docs/einvoicing_setup_guide.md` | Sheet columns, credentials, test row |

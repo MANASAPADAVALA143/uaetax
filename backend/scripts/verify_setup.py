@@ -123,7 +123,7 @@ def main():
         print("[SUCCESS] All checks passed! System is ready for testing.")
         print("\nNext steps:")
         print("1. Start backend: cd backend && uvicorn main:app --reload")
-        print("2. Start frontend: cd frontend && npm run dev")
+        print("2. Start frontend: npm run dev   (from repo root)")
         print("3. Upload test_transactions.csv to VAT Classifier")
     else:
         print("[WARNING] Some checks failed. Please fix the issues above.")

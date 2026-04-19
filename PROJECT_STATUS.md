@@ -3,7 +3,7 @@
 ## ✅ All Prompts Complete!
 
 ### Prompt 1 - Project Setup ✅
-- ✅ Next.js 14 frontend in `/frontend`
+- ✅ Next.js 14 app at repo root (`app/`, `components/`)
 - ✅ FastAPI backend in `/backend`
 - ✅ ChromaDB RAG system in `/rag`
 - ✅ PostgreSQL with SQLAlchemy
@@ -86,9 +86,8 @@
 
 ```
 gulftax-ai/
-├── frontend/              # Next.js 14 dashboard
-│   ├── app/dashboard/     # All dashboard pages
-│   └── components/        # Sidebar, Header
+├── app/                   # Next.js 14 dashboard (App Router)
+├── components/          # Shared UI
 ├── backend/               # FastAPI application
 │   ├── routers/           # VAT Classifier, VAT Return APIs
 │   ├── models.py         # SQLAlchemy models
