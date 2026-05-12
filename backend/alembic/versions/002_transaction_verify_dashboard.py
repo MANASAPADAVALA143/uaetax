@@ -34,7 +34,7 @@ def upgrade() -> None:
         "audit_logs",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
-        sa.Column("timestamp", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("timestamp", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("actor", sa.String(length=255), nullable=False),
         sa.Column("action", sa.String(length=500), nullable=False),
         sa.Column("entity", sa.String(length=255), nullable=True),

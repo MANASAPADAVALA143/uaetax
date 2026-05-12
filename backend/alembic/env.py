@@ -7,7 +7,15 @@ from alembic import context
 
 # Import your models and Base
 from database import Base
-from models import Company, Transaction, VATReturn, ReconciliationResult, AuditLog
+from models import (
+    Company,
+    Transaction,
+    VATReturn,
+    ReconciliationResult,
+    AuditLog,
+    EInvoicingAssessment,
+    CTReturn,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

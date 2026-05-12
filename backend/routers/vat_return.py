@@ -25,7 +25,13 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import get_db
-from models import Transaction, Company, VATReturn, ReconciliationResult
+from models import (
+    Transaction,
+    Company,
+    VATReturn,
+    ReconciliationResult,
+    FTASubmissionLog,
+)
 
 load_dotenv()
 
@@ -65,6 +71,14 @@ class ReconciliationResponse(BaseModel):
     difference_aed: float
     mismatches: List[Dict[str, Any]]
     recommendation: str
+
+
+class VATSubmitResponse(BaseModel):
+    return_id: int
+    submission_status: str
+    submitted_at: Optional[datetime] = None
+    fta_reference_number: Optional[str] = None
+    submission_error: Optional[str] = None
 
 
 def _transaction_side(t: Transaction) -> str:
@@ -483,6 +497,64 @@ async def get_return_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=vat_return_{return_id}.xlsx"}
     )
+
+
+@router.post("/returns/{return_id}/submit", response_model=VATSubmitResponse)
+async def submit_vat_return(
+    return_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    FTA submission tracked stub.
+
+    For now this route records an attempted submission and marks the return as failed
+    with a stubbed integration error, so frontend flows can handle a stable contract.
+    """
+    vat_return = db.query(VATReturn).filter(VATReturn.id == return_id).first()
+    if not vat_return:
+        raise HTTPException(status_code=404, detail="VAT return not found")
+
+    payload_snapshot = {
+        "return_id": vat_return.id,
+        "company_id": vat_return.company_id,
+        "period_start": vat_return.period_start.isoformat(),
+        "period_end": vat_return.period_end.isoformat(),
+        "box1_standard_rated_supplies": vat_return.box1_standard_rated_supplies,
+        "box2_vat_on_supplies": vat_return.box2_vat_on_supplies,
+        "box3_zero_rated_supplies": vat_return.box3_zero_rated_supplies,
+        "box4_exempt_supplies": vat_return.box4_exempt_supplies,
+        "box5_total_taxable_supplies": vat_return.box5_total_taxable_supplies,
+        "box6_taxable_expenses": vat_return.box6_taxable_expenses,
+        "box7_vat_on_expenses": vat_return.box7_vat_on_expenses,
+        "box8_vat_payable_or_refundable": vat_return.box8_vat_payable_or_refundable,
+    }
+
+    stub_error = "FTA submit integration is not configured"
+    attempted_at = datetime.utcnow()
+    vat_return.submission_status = "failed"
+    vat_return.submitted_at = attempted_at
+    vat_return.fta_reference_number = None
+    vat_return.submission_error = stub_error
+
+    db.add(
+        FTASubmissionLog(
+            vat_return_id=vat_return.id,
+            attempted_at=attempted_at,
+            submission_status=vat_return.submission_status,
+            payload_snapshot=payload_snapshot,
+            response_raw={"stub": True, "error": stub_error},
+        )
+    )
+    db.commit()
+    db.refresh(vat_return)
+
+    return {
+        "return_id": vat_return.id,
+        "submission_status": vat_return.submission_status,
+        "submitted_at": vat_return.submitted_at,
+        "fta_reference_number": vat_return.fta_reference_number,
+        "submission_error": vat_return.submission_error,
+    }
 
 
 @router.post("/reconcile/{vat_return_id}", response_model=ReconciliationResponse)

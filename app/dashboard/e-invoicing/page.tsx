@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 
 /** Mirrors `scripts/generate_einvoicing_n8n.py` → `UAE_EInvoicing_Readiness.json` Code node. */
 type IntegrationStatus = "not_started" | "planning" | "testing" | "live";
@@ -151,6 +152,22 @@ function computeScope(args: { revenue: number; tx: TxType; entity: string }) {
 }
 
 type FieldCheck = { id: string; label: string; ok: boolean; hint: string };
+type ReadinessLevel = "not_ready" | "partial" | "ready";
+
+interface AssessmentRecord {
+  id: number;
+  company_id: number;
+  assessed_at: string;
+  overall_score: number;
+  readiness_level: ReadinessLevel;
+  gap_areas: unknown[];
+  recommendations: unknown[];
+}
+
+type LoadState = "idle" | "loading" | "ok" | "error";
+type ToastState = { kind: "success" | "error"; message: string } | null;
+
+const COMPANY_ID = 1;
 
 function validatePintAePaste(raw: string): FieldCheck[] {
   const t = raw.toLowerCase();
@@ -303,7 +320,16 @@ const ROADMAP_PHASES = [
 ] as const;
 
 export default function EInvoicingPage() {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const [tab, setTab] = useState(0);
+  const [summaryState, setSummaryState] = useState<LoadState>("loading");
+  const [historyState, setHistoryState] = useState<LoadState>("loading");
+  const [latestAssessment, setLatestAssessment] = useState<AssessmentRecord | null>(null);
+  const [history, setHistory] = useState<AssessmentRecord[]>([]);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [triggerDisabledUntil, setTriggerDisabledUntil] = useState<number | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
   /* Tab 1 */
   const [revInput, setRevInput] = useState("");
@@ -359,8 +385,105 @@ export default function EInvoicingPage() {
     return `${fmtAed(gapRun.costLow)} – ${fmtAed(gapRun.costHigh)}`;
   }, [gapRun]);
 
+  const triggerCooldownSeconds = useMemo(() => {
+    if (!triggerDisabledUntil) return 0;
+    return Math.max(0, Math.ceil((triggerDisabledUntil - Date.now()) / 1000));
+  }, [triggerDisabledUntil, isTriggering]);
+
+  const isTriggerDisabled = isTriggering || triggerCooldownSeconds > 0;
+
+  const toStringList = (value: unknown[]): string[] => {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
+  };
+
+  const fetchAssessments = async () => {
+    setSummaryState("loading");
+    setHistoryState("loading");
+    setExpandedId(null);
+    try {
+      const [latestRes, historyRes] = await Promise.all([
+        axios.get<AssessmentRecord[]>(`${apiUrl}/api/automations/assessments`, {
+          params: { company_id: COMPANY_ID, limit: 1 },
+          timeout: 15000,
+        }),
+        axios.get<AssessmentRecord[]>(`${apiUrl}/api/automations/assessments`, {
+          params: { company_id: COMPANY_ID, limit: 10 },
+          timeout: 15000,
+        }),
+      ]);
+      setLatestAssessment(latestRes.data[0] ?? null);
+      setHistory(historyRes.data ?? []);
+      setSummaryState("ok");
+      setHistoryState("ok");
+    } catch {
+      setLatestAssessment(null);
+      setHistory([]);
+      setSummaryState("error");
+      setHistoryState("error");
+    }
+  };
+
+  useEffect(() => {
+    fetchAssessments();
+  }, [apiUrl]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!triggerDisabledUntil) return;
+    if (triggerDisabledUntil <= Date.now()) {
+      setTriggerDisabledUntil(null);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (triggerDisabledUntil <= Date.now()) {
+        setTriggerDisabledUntil(null);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [triggerDisabledUntil]);
+
+  const onRequestAssessment = async () => {
+    setIsTriggering(true);
+    try {
+      await axios.post(`${apiUrl}/api/automations/trigger/${COMPANY_ID}`, undefined, {
+        timeout: 15000,
+      });
+      setToast({
+        kind: "success",
+        message: "Assessment requested — results will appear shortly",
+      });
+      setTriggerDisabledUntil(Date.now() + 60_000);
+      await fetchAssessments();
+    } catch {
+      setToast({
+        kind: "error",
+        message: "Failed to trigger — check n8n connection",
+      });
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
   return (
     <>
+      {toast && (
+        <div
+          className={`mb-4 rounded-[10px] border px-4 py-3 text-sm ${
+            toast.kind === "success"
+              ? "border-green/40 bg-[rgba(45,212,160,0.1)] text-green"
+              : "border-red/40 bg-[rgba(255,107,107,0.1)] text-red"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
       <div className="mb-7">
         <div className="font-mono text-[11px] text-gold uppercase tracking-[0.1em] mb-1.5">
           // E-Invoicing
@@ -370,6 +493,216 @@ export default function EInvoicingPage() {
           Client-side shell aligned to Ministerial Decisions 243/244 (2025) timelines in the n8n
           template. No API calls; backend wiring comes later.
         </p>
+      </div>
+
+      <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-8 mb-6 space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Readiness assessment</h3>
+            <p className="text-[13px] text-muted mt-1">
+              Latest e-invoicing workflow outcome for company {COMPANY_ID}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRequestAssessment}
+            disabled={isTriggerDisabled}
+            className="px-5 py-2.5 rounded-[10px] text-sm font-medium border border-border-g text-gold-lt bg-gold-pale hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isTriggering
+              ? "Requesting..."
+              : triggerCooldownSeconds > 0
+                ? `Request Assessment (${triggerCooldownSeconds}s)`
+                : "Request Assessment"}
+          </button>
+        </div>
+
+        {summaryState === "loading" && (
+          <div className="space-y-3">
+            <div className="h-12 rounded-lg bg-[rgba(78,168,255,0.08)] animate-pulse" />
+            <div className="h-20 rounded-lg bg-[rgba(78,168,255,0.08)] animate-pulse" />
+          </div>
+        )}
+
+        {summaryState === "error" && (
+          <div className="rounded-lg border border-red/30 bg-[rgba(255,107,107,0.08)] px-4 py-3 text-sm text-red">
+            Could not load assessment data.
+          </div>
+        )}
+
+        {summaryState === "ok" && !latestAssessment && (
+          <div className="rounded-xl border border-border bg-[rgba(4,12,30,0.45)] p-5 text-sm text-muted">
+            No assessment on file. Click Request Assessment to trigger the readiness workflow.
+          </div>
+        )}
+
+        {summaryState === "ok" && latestAssessment && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`text-xs font-mono uppercase px-3 py-1 rounded-full border ${
+                  latestAssessment.readiness_level === "not_ready"
+                    ? "bg-[rgba(255,107,107,0.15)] border-red text-red"
+                    : latestAssessment.readiness_level === "partial"
+                      ? "bg-[rgba(255,169,64,0.12)] border-amber text-amber"
+                      : "bg-[rgba(45,212,160,0.1)] border-green text-green"
+                }`}
+              >
+                {latestAssessment.readiness_level.replace("_", " ")}
+              </span>
+              <span className="text-sm text-muted">
+                Assessed{" "}
+                {new Date(latestAssessment.assessed_at).toLocaleString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Asia/Dubai",
+                })}
+              </span>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-[12px] text-muted2 uppercase tracking-wide mb-2">
+                <span>Overall score</span>
+                <span className="font-mono text-gold-lt">{latestAssessment.overall_score}%</span>
+              </div>
+              <div className="h-2 bg-[rgba(255,255,255,0.08)] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-gold to-gold-lt transition-all"
+                  style={{ width: `${Math.max(0, Math.min(100, latestAssessment.overall_score))}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-5">
+              <div>
+                <h4 className="text-sm text-white font-semibold mb-2">Gaps identified</h4>
+                <ul className="list-disc list-inside text-[13px] text-muted space-y-1">
+                  {toStringList(latestAssessment.gap_areas).length > 0 ? (
+                    toStringList(latestAssessment.gap_areas).map((gap, idx) => (
+                      <li key={`${gap}-${idx}`}>{gap}</li>
+                    ))
+                  ) : (
+                    <li>No major gaps identified.</li>
+                  )}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm text-white font-semibold mb-2">Recommended actions</h4>
+                <ol className="list-decimal list-inside text-[13px] text-muted space-y-1">
+                  {toStringList(latestAssessment.recommendations).length > 0 ? (
+                    toStringList(latestAssessment.recommendations).map((item, idx) => (
+                      <li key={`${item}-${idx}`}>{item}</li>
+                    ))
+                  ) : (
+                    <li>No recommendations available.</li>
+                  )}
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="pt-3 border-t border-border">
+          <h4 className="text-sm text-white font-semibold mb-3">Assessment history</h4>
+          {historyState === "loading" && (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <div key={idx} className="h-10 rounded bg-[rgba(78,168,255,0.08)] animate-pulse" />
+              ))}
+            </div>
+          )}
+          {historyState === "error" && (
+            <p className="text-sm text-red">Unable to load assessment history.</p>
+          )}
+          {historyState === "ok" && history.length === 0 && (
+            <p className="text-sm text-muted">No assessments yet.</p>
+          )}
+          {historyState === "ok" && history.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-left text-[13px]">
+                <thead className="bg-[rgba(4,12,30,0.9)] text-muted2 uppercase text-[11px]">
+                  <tr>
+                    <th className="px-4 py-2">Date</th>
+                    <th className="px-4 py-2">Score</th>
+                    <th className="px-4 py-2">Readiness Level</th>
+                    <th className="px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((row) => {
+                    const isExpanded = expandedId === row.id;
+                    const gaps = toStringList(row.gap_areas);
+                    const recs = toStringList(row.recommendations);
+                    return (
+                      [
+                        <tr
+                          key={row.id}
+                          className="border-t border-border text-muted cursor-pointer hover:bg-[rgba(20,50,100,0.25)]"
+                          onClick={() => setExpandedId((prev) => (prev === row.id ? null : row.id))}
+                        >
+                          <td className="px-4 py-2 text-white">
+                            {new Date(row.assessed_at).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              timeZone: "Asia/Dubai",
+                            })}
+                          </td>
+                          <td className="px-4 py-2 font-mono">{row.overall_score}%</td>
+                          <td className="px-4 py-2">{row.readiness_level.replace("_", " ")}</td>
+                          <td className="px-4 py-2 text-gold-lt">
+                            {isExpanded ? "Hide details" : "View details"}
+                          </td>
+                        </tr>,
+                        ...(isExpanded
+                          ? [
+                              <tr key={`expanded-${row.id}`} className="border-t border-border">
+                                <td colSpan={4} className="px-4 py-3 bg-[rgba(4,12,30,0.4)]">
+                                  <div className="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                      <h5 className="text-xs uppercase text-muted2 mb-1.5">
+                                        Gaps identified
+                                      </h5>
+                                      <ul className="list-disc list-inside text-[13px] text-muted space-y-1">
+                                        {gaps.length > 0 ? (
+                                          gaps.map((gap, idx) => (
+                                            <li key={`${row.id}-gap-${idx}`}>{gap}</li>
+                                          ))
+                                        ) : (
+                                          <li>No major gaps identified.</li>
+                                        )}
+                                      </ul>
+                                    </div>
+                                    <div>
+                                      <h5 className="text-xs uppercase text-muted2 mb-1.5">
+                                        Recommended actions
+                                      </h5>
+                                      <ol className="list-decimal list-inside text-[13px] text-muted space-y-1">
+                                        {recs.length > 0 ? (
+                                          recs.map((item, idx) => (
+                                            <li key={`${row.id}-rec-${idx}`}>{item}</li>
+                                          ))
+                                        ) : (
+                                          <li>No recommendations available.</li>
+                                        )}
+                                      </ol>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>,
+                            ]
+                          : []),
+                      ]
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6 border-b border-border pb-3">

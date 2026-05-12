@@ -168,3 +168,34 @@ async def dashboard_summary(
         "pending_approvals": int(pending_approvals),
         "open_reconciliation_mismatches": int(open_mismatches),
     }
+
+
+@router.get("/activity")
+async def dashboard_activity(
+    company_id: int = Query(..., description="Company ID"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> List[Dict[str, Any]]:
+    """Activity feed for dashboard timeline widgets."""
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.company_id == company_id)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "company_id": r.company_id,
+            "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+            "actor": r.actor,
+            "action": r.action,
+            "entity": r.entity,
+            "entity_type": r.entity_type,
+            "entity_id": r.entity_id,
+            "before_state": r.before_state,
+            "after_state": r.after_state,
+        }
+        for r in rows
+    ]

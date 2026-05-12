@@ -1,0 +1,242 @@
+{
+  "name": "UAE Corporate Tax Auto-Calculate",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 1,4,7,10 *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Quarterly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        220
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "companies",
+              "value": "={{ [{\"company_id\":1,\"company_name\":\"Demo Company\"}] }}",
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "id": "set-companies",
+      "name": "Build company batch",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const companies = $json.companies || [];\nreturn companies.map(c => ({ json: c }));"
+      },
+      "id": "expand-companies",
+      "name": "Expand Companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "split-batches",
+      "name": "SplitInBatches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst q = Math.floor(now.getUTCMonth() / 3);\nconst startMonth = q * 3;\nconst tax_period_start = new Date(Date.UTC(now.getUTCFullYear(), startMonth, 1));\nconst tax_period_end = new Date(Date.UTC(now.getUTCFullYear(), startMonth + 3, 0));\nreturn [{\n  json: {\n    company_id: $json.company_id,\n    company_name: $json.company_name,\n    tax_period_start: tax_period_start.toISOString().slice(0, 10),\n    tax_period_end: tax_period_end.toISOString().slice(0, 10),\n    accounting_profit: 0,\n    addbacks: [],\n    deductions: [],\n    free_zone_income: 0,\n    qfzp_eligible: false\n  }\n}];"
+      },
+      "id": "build-ct-payload",
+      "name": "Build CT payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.GULFTAX_API_URL || 'http://10.174.232.164:8001') + '/api/ct/calculate' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "post-ct-calculate",
+      "name": "POST /api/ct/calculate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $json;\nconst body = source.body || source;\nconst taxPayable = body.tax_payable ?? 0;\nconst taxableIncome = body.taxable_income ?? 0;\nconst returnId = body.id ?? null;\nreturn [{\n  json: {\n    company_name: source.company_name || 'Unknown Company',\n    company_id: source.company_id,\n    ct_return_id: returnId,\n    taxable_income: taxableIncome,\n    tax_payable: taxPayable,\n    summary: `CT calculated for ${source.company_name || source.company_id}: AED ${taxPayable} payable`\n  }\n}];"
+      },
+      "id": "log-audit-result",
+      "name": "Log audit result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "notification",
+              "value": "={{ $json.summary }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "notify-placeholder",
+      "name": "Send notification placeholder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1840,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Quarterly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Build company batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build company batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build company batch": {
+      "main": [
+        [
+          {
+            "node": "Expand Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Companies": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitInBatches": {
+      "main": [
+        [
+          {
+            "node": "Build CT payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CT payload": {
+      "main": [
+        [
+          {
+            "node": "POST /api/ct/calculate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/ct/calculate": {
+      "main": [
+        [
+          {
+            "node": "Log audit result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log audit result": {
+      "main": [
+        [
+          {
+            "node": "Send notification placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

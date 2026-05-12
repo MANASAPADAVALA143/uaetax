@@ -1,0 +1,232 @@
+{
+  "name": "UAE E-Invoicing Readiness Assessment",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "einvoicing-assess",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst score = item.readiness_score || 0;\n\nconst payload = {\n  company_id: item.company_id || 1,\n  assessed_at: item.assessment_date,\n  overall_score: score,\n  readiness_level: score >= 75 ? 'ready' : score >= 40 ? 'partial' : 'not_ready',\n  gap_areas: item.gaps || [],\n  recommendations: (item.gaps || []).map(g => g.action),\n  raw_payload: {\n    phase: item.phase,\n    urgency: item.urgency_level,\n    days_to_go_live: item.days_to_go_live\n  }\n};\n\nconst body = JSON.stringify(payload);\n\nreturn [{ json: { ...payload, _body: body } }];"
+      },
+      "id": "build-hmac",
+      "name": "Build assessment payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.GULFTAX_API_URL || 'http://10.174.232.164:8001') + '/api/automations/n8n/inbound/einvoicing_assessed' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-Signature",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json._body }}",
+        "options": {}
+      },
+      "id": "post-backend",
+      "name": "POST to GulfTax Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        260
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.statusCode || $json.code || 0 }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-success",
+      "name": "Check backend response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        980,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "sync_status",
+              "value": "synced",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-synced",
+      "name": "Mark assessment as synced",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "notification",
+              "value": "Backend sync failed - send Slack/email alert",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-failed",
+      "name": "Send notification placeholder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"ok\"}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        1460,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build assessment payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build assessment payload": {
+      "main": [
+        [
+          {
+            "node": "POST to GulfTax Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST to GulfTax Backend": {
+      "main": [
+        [
+          {
+            "node": "Check backend response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check backend response": {
+      "main": [
+        [
+          {
+            "node": "Mark assessment as synced",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send notification placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark assessment as synced": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send notification placeholder": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

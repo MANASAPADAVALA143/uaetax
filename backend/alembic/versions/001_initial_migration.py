@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '001_initial'
@@ -31,7 +30,7 @@ def upgrade() -> None:
         sa.Column('is_qfzp', sa.Boolean(), nullable=True),
         sa.Column('vat_registered', sa.Boolean(), nullable=True),
         sa.Column('ct_registered', sa.Boolean(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_companies_id'), 'companies', ['id'], unique=False)
@@ -54,7 +53,7 @@ def upgrade() -> None:
         sa.Column('confidence_score', sa.Float(), nullable=True),
         sa.Column('ai_reasoning', sa.Text(), nullable=True),
         sa.Column('is_verified', sa.Boolean(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=True),
         sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
@@ -78,7 +77,7 @@ def upgrade() -> None:
         sa.Column('box7_vat_on_expenses', sa.Float(), nullable=True),
         sa.Column('box8_vat_payable_or_refundable', sa.Float(), nullable=True),
         sa.Column('status', sa.String(length=50), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=True),
         sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
@@ -95,9 +94,9 @@ def upgrade() -> None:
         sa.Column('total_output_vat_aed', sa.Float(), nullable=True),
         sa.Column('vat_return_output_aed', sa.Float(), nullable=True),
         sa.Column('difference_aed', sa.Float(), nullable=True),
-        sa.Column('mismatches', postgresql.JSON(astext_type=sa.Text()), nullable=True),
+        sa.Column('mismatches', sa.JSON(), nullable=True),
         sa.Column('status', sa.String(length=50), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=True),
         sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ),
         sa.ForeignKeyConstraint(['vat_return_id'], ['vat_returns.id'], ),
         sa.PrimaryKeyConstraint('id')

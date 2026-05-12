@@ -1,0 +1,167 @@
+{
+  "name": "E-Invoicing Manual Trigger Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "einvoicing-trigger",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.GULFTAX_API_URL + '/api/dashboard/summary?company_id=' + $json.company_id }}"
+      },
+      "id": "fetch-company",
+      "name": "Fetch company data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\nconst companyId = Number($('Webhook').first().json.body?.company_id ?? $('Webhook').first().json.company_id);\nconst hasTrn = Boolean(d?.e_invoicing || d?.vat);\nconst dimensions = [\n  { key: 'fta_portal_registration', score: hasTrn ? 100 : 0 },\n  { key: 'asp_accreditation', score: 50 },\n  { key: 'erp_einvoicing_capability', score: 50 },\n  { key: 'staff_training', score: 25 },\n];\nconst overall = Math.round(dimensions.reduce((sum, x) => sum + x.score, 0) / dimensions.length);\nlet readiness = 'not_ready';\nif (overall >= 75) readiness = 'ready';\nelse if (overall >= 40) readiness = 'partial';\nconst gap_areas = dimensions.filter(x => x.score < 75).map(x => `${x.key} below target`);\nconst recommendations = [\n  'Assign ASP selection owner and shortlist accredited providers',\n  'Run ERP capability fit-gap against UAE PINT AE requirements',\n  'Schedule finance + tax training on e-invoicing processes'\n];\nreturn [{\n  json: {\n    company_id: companyId,\n    assessed_at: new Date().toISOString(),\n    overall_score: overall,\n    readiness_level: readiness,\n    gap_areas,\n    recommendations,\n    raw_payload: {\n      dimensions,\n      dashboard_summary: d\n    }\n  }\n}];"
+      },
+      "id": "run-scoring",
+      "name": "Run readiness scoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst score = item.readiness_score ?? item.overall_score ?? 0;\nconst gaps = item.gaps ?? item.gap_areas ?? [];\nconst recFromGaps = Array.isArray(gaps)\n  ? gaps.map(g => (g && typeof g === 'object' && g.action != null) ? g.action : String(g))\n  : [];\nconst payload = {\n  company_id: item.company_id || 1,\n  assessed_at: item.assessment_date ?? item.assessed_at,\n  overall_score: score,\n  readiness_level: item.readiness_level ?? (score >= 75 ? 'ready' : score >= 40 ? 'partial' : 'not_ready'),\n  gap_areas: gaps,\n  recommendations: item.recommendations ?? recFromGaps,\n  raw_payload: item.raw_payload ?? {\n    phase: item.phase,\n    urgency: item.urgency_level ?? item.urgency,\n    days_to_go_live: item.days_to_go_live,\n  },\n};\nconst body = JSON.stringify(payload);\nreturn [{ json: { ...payload, _body: body } }];"
+      },
+      "id": "build-hmac",
+      "name": "Build assessment payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.GULFTAX_API_URL || 'http://10.174.232.164:8001') + '/api/automations/n8n/inbound/einvoicing_assessed' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-Signature",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json._body }}"
+      },
+      "id": "post-assessment",
+      "name": "POST assessment back to GulfTax",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"assessment queued\"}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        1420,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch company data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch company data": {
+      "main": [
+        [
+          {
+            "node": "Run readiness scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run readiness scoring": {
+      "main": [
+        [
+          {
+            "node": "Build assessment payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build assessment payload": {
+      "main": [
+        [
+          {
+            "node": "POST assessment back to GulfTax",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST assessment back to GulfTax": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
