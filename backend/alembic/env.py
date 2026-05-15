@@ -46,7 +46,7 @@ def get_url():
     # Always load backend/.env (not cwd), so `alembic` works from any directory.
     backend_root = Path(__file__).resolve().parent.parent
     load_dotenv(backend_root / ".env", override=True)
-    return os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/gulftax_ai")
+    return os.getenv("DATABASE_URL", "sqlite:///./gulftax.db")
 
 
 def run_migrations_offline() -> None:
