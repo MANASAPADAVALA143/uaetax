@@ -1,0 +1,301 @@
+{
+  "name": "UAE VAT Return Prep",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 1 1,4,7,10 *"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Quarterly Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [-1776, 128]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "input_sheet_id",
+              "value": "YOUR_VAT_TRANSACTIONS_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "input_sheet_name",
+              "value": "VAT Transactions",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "tracker_sheet_id",
+              "value": "YOUR_VAT_TRACKER_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "tracker_sheet_name",
+              "value": "VAT Return Tracker",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000002",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [-1568, 128]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.input_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.input_sheet_name }}"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000003",
+      "name": "Read VAT Transactions",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [-1328, 128],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "dfMtUrz6LA9fOdEA",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allRows = $input.all();\nconst cfg = $('Set Config').item.json;\n\n// Detect current quarter period\nconst today = new Date();\nconst year = today.getFullYear();\nconst month = today.getMonth() + 1;\nconst quarter = Math.ceil(month / 3);\nconst periodStr = `${year}-Q${quarter}`;\nconst startMonth = (quarter - 1) * 3 + 1;\nconst endMonth = startMonth + 2;\nconst endDay = new Date(year, endMonth, 0).getDate();\nconst periodStart = `${year}-${String(startMonth).padStart(2,'0')}-01`;\nconst periodEnd = `${year}-${String(endMonth).padStart(2,'0')}-${String(endDay).padStart(2,'0')}`;\n\n// Calculate VAT boxes from transaction rows\nlet box1 = 0, box3 = 0, box4 = 0, box6 = 0;\nlet companyId = 1;\nlet companyName = 'Unknown';\nlet trn = '';\n\nfor (const r of allRows) {\n  const row = r.json;\n  companyId = row['Company ID'] ? parseInt(row['Company ID']) : companyId;\n  companyName = row['Company Name'] || companyName;\n  trn = row['TRN'] || trn;\n  const amount = parseFloat(row['Amount AED'] || 0);\n  const type = (row['Transaction Type'] || 'sale').toLowerCase();\n  const treatment = (row['VAT Treatment'] || '').toLowerCase();\n  if (type === 'sale') {\n    if (treatment === 'standard_rated') box1 += amount;\n    else if (treatment === 'zero_rated') box3 += amount;\n    else if (treatment === 'exempt') box4 += amount;\n  } else if (type === 'purchase' && treatment === 'standard_rated') {\n    box6 += amount;\n  }\n}\n\nconst box2 = Math.round(box1 * 0.05 * 100) / 100;\nconst box5 = Math.round((box1 + box3 + box4) * 100) / 100;\nconst box7 = Math.round(box6 * 0.05 * 100) / 100;\nconst box8 = Math.round((box2 - box7) * 100) / 100;\n\n// Filing deadline = 28th of the month following quarter end\nconst dlMonth = endMonth === 12 ? 1 : endMonth + 1;\nconst dlYear = endMonth === 12 ? year + 1 : year;\nconst filingDeadline = `${dlYear}-${String(dlMonth).padStart(2,'0')}-28`;\nconst dl = new Date(filingDeadline);\nconst daysToFiling = Math.ceil((dl - today) / 86400000);\nconst isOverdue = daysToFiling < 0;\nconst urgencyLevel = isOverdue ? 'overdue' : daysToFiling <= 7 ? 'urgent' : daysToFiling <= 30 ? 'normal' : 'low';\n\nreturn [{ json: {\n  company_id: companyId,\n  company_name: companyName,\n  trn,\n  period: periodStr,\n  fiscal_year: String(year),\n  period_start: periodStart,\n  period_end: periodEnd,\n  box1_standard_rated_supplies: box1,\n  box2_vat_on_supplies: box2,\n  box3_zero_rated_supplies: box3,\n  box4_exempt_supplies: box4,\n  box5_total_taxable_supplies: box5,\n  box6_taxable_expenses: box6,\n  box7_vat_on_expenses: box7,\n  box8_vat_payable_or_refundable: box8,\n  filing_deadline: filingDeadline,\n  days_to_filing: daysToFiling,\n  is_overdue: isOverdue,\n  urgency_level: urgencyLevel,\n  assessment_date: today.toISOString(),\n  tracker_sheet_id: cfg.tracker_sheet_id,\n  tracker_sheet_name: cfg.tracker_sheet_name\n}}];\n"
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000004",
+      "name": "Calculate VAT Boxes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1056, 128]
+    },
+    {
+      "parameters": {
+        "jsCode": "const calc = $input.first().json;\n\nconst payload = JSON.stringify({\n  model: \"claude-sonnet-4-20250514\",\n  max_tokens: 1000,\n  system: \"You are a UAE VAT compliance expert writing for a CFO. Reference UAE Federal Decree-Law No. 8 of 2017 and FTA guidelines. Direct, practical. AED amounts. Max 350 words.\",\n  messages: [{\n    role: \"user\",\n    content: \"Write a UAE VAT return advisory. COMPANY: \" + calc.company_name + \" PERIOD: \" + calc.period + \" BOX 1 (Standard Rated Supplies): AED \" + calc.box1_standard_rated_supplies + \" BOX 2 (Output VAT): AED \" + calc.box2_vat_on_supplies + \" BOX 6 (Taxable Expenses): AED \" + calc.box6_taxable_expenses + \" BOX 7 (Input VAT): AED \" + calc.box7_vat_on_expenses + \" BOX 8 (Net VAT Payable/Refundable): AED \" + calc.box8_vat_payable_or_refundable + \" FILING DEADLINE: \" + calc.filing_deadline + \" DAYS TO FILING: \" + calc.days_to_filing + \" STATUS: \" + calc.urgency_level + \". Write 3 sections: 1.VAT POSITION SUMMARY 2.IMMEDIATE ACTIONS (next 7 days) 3.COMPLIANCE NOTES\"\n  }]\n});\n\nreturn [{ json: { ...calc, claude_payload: JSON.parse(payload) } }];\n"
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000005",
+      "name": "Build Claude Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-848, 128]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $vars.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.claude_payload }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000006",
+      "name": "Claude — VAT Advisory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-576, 128],
+      "notes": "Model: claude-sonnet-4-20250514. Set ANTHROPIC_API_KEY in n8n Variables."
+    },
+    {
+      "parameters": {
+        "jsCode": "const claudeResp = $input.first().json;\nconst calc = $('Build Claude Payload').first().json;\n\nconst narrative = claudeResp.content?.[0]?.text || '';\nconst combinedReport = `UAE VAT RETURN — ${calc.company_name}\\n${'─'.repeat(55)}\\nPeriod      : ${calc.period} (${calc.period_start} → ${calc.period_end})\\nTRN         : ${calc.trn}\\nFiling By   : ${calc.filing_deadline} (${calc.days_to_filing} days)\\nStatus      : ${calc.urgency_level.toUpperCase()}\\n${'─'.repeat(55)}\\nBox 1 Standard Rated Supplies : AED ${calc.box1_standard_rated_supplies.toLocaleString()}\\nBox 2 Output VAT (5%)         : AED ${calc.box2_vat_on_supplies.toLocaleString()}\\nBox 3 Zero Rated Supplies     : AED ${calc.box3_zero_rated_supplies.toLocaleString()}\\nBox 4 Exempt Supplies         : AED ${calc.box4_exempt_supplies.toLocaleString()}\\nBox 5 Total Taxable Supplies  : AED ${calc.box5_total_taxable_supplies.toLocaleString()}\\nBox 6 Taxable Expenses        : AED ${calc.box6_taxable_expenses.toLocaleString()}\\nBox 7 Input VAT (5%)          : AED ${calc.box7_vat_on_expenses.toLocaleString()}\\nBox 8 NET VAT PAYABLE         : AED ${calc.box8_vat_payable_or_refundable.toLocaleString()}\\n${'─'.repeat(55)}\\n${narrative}`;\n\nconst backendPayload = {\n  company_id: calc.company_id,\n  period: calc.period,\n  fiscal_year: calc.fiscal_year,\n  period_start: calc.period_start,\n  period_end: calc.period_end,\n  box1_standard_rated_supplies: calc.box1_standard_rated_supplies,\n  box2_vat_on_supplies: calc.box2_vat_on_supplies,\n  box3_zero_rated_supplies: calc.box3_zero_rated_supplies,\n  box4_exempt_supplies: calc.box4_exempt_supplies,\n  box5_total_taxable_supplies: calc.box5_total_taxable_supplies,\n  box6_taxable_expenses: calc.box6_taxable_expenses,\n  box7_vat_on_expenses: calc.box7_vat_on_expenses,\n  box8_vat_payable_or_refundable: calc.box8_vat_payable_or_refundable,\n  filing_deadline: calc.filing_deadline,\n  days_to_filing: calc.days_to_filing,\n  is_overdue: calc.is_overdue,\n  urgency_level: calc.urgency_level,\n  assessment_date: calc.assessment_date\n};\n\nreturn [{ json: { ...calc, claude_narrative: narrative, combined_report: combinedReport, _body: JSON.stringify(backendPayload) } }];\n"
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000007",
+      "name": "Compile VAT Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-320, 128]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.174.232.164:8001/api/vat/n8n/inbound/vat_assessed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-Signature",
+              "value": "={{ $vars.N8N_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "JSON",
+        "body": "={{ $json._body }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000008",
+      "name": "POST to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [96, 128]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.tracker_sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.tracker_sheet_name }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            { "id": "assessment_date", "displayName": "assessment_date", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "company_name", "displayName": "company_name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "trn", "displayName": "trn", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "period", "displayName": "period", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "filing_deadline", "displayName": "filing_deadline", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "days_to_filing", "displayName": "days_to_filing", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "urgency_level", "displayName": "urgency_level", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "box1_standard_rated_supplies", "displayName": "box1_standard_rated_supplies", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "box2_vat_on_supplies", "displayName": "box2_vat_on_supplies", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "box8_vat_payable_or_refundable", "displayName": "box8_vat_payable_or_refundable", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "combined_report", "displayName": "combined_report", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "claude_narrative", "displayName": "claude_narrative", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000009",
+      "name": "Log to Tracker",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [368, 128],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "dfMtUrz6LA9fOdEA",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "whatsapp:+14155238886" },
+            { "name": "To", "value": "whatsapp:+918886469888" },
+            {
+              "name": "Body",
+              "value": "={{ '🇦🇪 VAT Return Prep — ' + $json.company_name + '\\nPeriod: ' + $json.period + '\\nBox 8 (Net VAT): AED ' + $json.box8_vat_payable_or_refundable + '\\nFiling Deadline: ' + $json.filing_deadline + ' (' + $json.days_to_filing + ' days)\\nStatus: ' + $json.urgency_level.toUpperCase() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000010",
+      "name": "WhatsApp — CFO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [608, -32],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "Nyg3zojq7iN3Am0V",
+          "name": "Unnamed credential"
+        }
+      },
+      "notes": "Twilio WhatsApp. Credentials: HTTP Basic Auth → Account SID as user, Auth Token as password."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Quarterly Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Set Config": {
+      "main": [[{ "node": "Read VAT Transactions", "type": "main", "index": 0 }]]
+    },
+    "Read VAT Transactions": {
+      "main": [[{ "node": "Calculate VAT Boxes", "type": "main", "index": 0 }]]
+    },
+    "Calculate VAT Boxes": {
+      "main": [[{ "node": "Build Claude Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Claude Payload": {
+      "main": [[{ "node": "Claude — VAT Advisory", "type": "main", "index": 0 }]]
+    },
+    "Claude — VAT Advisory": {
+      "main": [[{ "node": "Compile VAT Report", "type": "main", "index": 0 }]]
+    },
+    "Compile VAT Report": {
+      "main": [[
+        { "node": "POST to Backend", "type": "main", "index": 0 },
+        { "node": "WhatsApp — CFO", "type": "main", "index": 0 }
+      ]]
+    },
+    "POST to Backend": {
+      "main": [[{ "node": "Log to Tracker", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "vat-return-prep-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "afc2dd1bd78f3b76ea007c75e8ca553bbbbc9e0fae36cb1b61e850d114a51592"
+  },
+  "id": "VATReturnPrepWorkflow",
+  "tags": []
+}

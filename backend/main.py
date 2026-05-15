@@ -1,4 +1,5 @@
 """FastAPI main application"""
+import os
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,12 +12,20 @@ from routers.dashboard import router as dashboard_router
 from routers import automations
 from routers import corporate_tax
 
-# Always load backend/.env regardless of process cwd and existing env values.
-load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+# Load .env only in local dev — Railway injects env vars directly
+_env_file = Path(__file__).resolve().parent / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file, override=True)
 
-Base.metadata.create_all(bind=engine)
+# SQLite only: auto-create tables on startup (Postgres uses alembic migrations)
+if "sqlite" in os.getenv("DATABASE_URL", "sqlite"):
+    Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="GulfTax AI API", version="1.0.0")
+app = FastAPI(
+    title="GulfTax AI API",
+    version="1.0.0",
+    description="UAE Tax SaaS — VAT, Corporate Tax, E-Invoicing",
+)
 
 app.include_router(vat_classifier_router)
 app.include_router(vat_return_router)
@@ -24,9 +33,15 @@ app.include_router(dashboard_router)
 app.include_router(automations.router, prefix="/api/automations", tags=["automations"])
 app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"])
 
+# CORS — allow production frontend + local dev
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,13 +1,16 @@
 """VAT Return Generator API Router"""
+import hashlib
+import hmac
 import os
+import secrets
 import sys
 from datetime import date, datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, case
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 import pandas as pd
 import json
 import io
@@ -31,6 +34,7 @@ from models import (
     VATReturn,
     ReconciliationResult,
     FTASubmissionLog,
+    AuditLog,
 )
 
 load_dotenv()
@@ -555,6 +559,184 @@ async def submit_vat_return(
         "fta_reference_number": vat_return.fta_reference_number,
         "submission_error": vat_return.submission_error,
     }
+
+
+class VATAssessedPayload(BaseModel):
+    """Inbound VAT assessment payload from n8n UAE_VAT_Return_Prep workflow."""
+    company_id: int
+    period: str  # e.g. "2024-Q1", "2024-01", "2024"
+    fiscal_year: Optional[str] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    box1_standard_rated_supplies: float = 0.0
+    box2_vat_on_supplies: float = 0.0
+    box3_zero_rated_supplies: float = 0.0
+    box4_exempt_supplies: float = 0.0
+    box5_total_taxable_supplies: float = 0.0
+    box6_taxable_expenses: float = 0.0
+    box7_vat_on_expenses: float = 0.0
+    box8_vat_payable_or_refundable: float = 0.0
+    box9: Optional[float] = None
+    box10: Optional[float] = None
+    box11: Optional[float] = None
+    filing_deadline: Optional[str] = None
+    days_to_filing: Optional[int] = None
+    is_overdue: Optional[bool] = None
+    urgency_level: Optional[str] = None
+    assessment_date: Optional[str] = None
+
+
+def _verify_vat_signature(secret: str, body: bytes, received: str) -> bool:
+    """HMAC-SHA256 hex over raw body, or plain shared secret fallback."""
+    if not received or not received.strip():
+        return False
+    received = received.strip()
+    expected_hex = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    if hmac.compare_digest(expected_hex, received.lower()):
+        return True
+    return secrets.compare_digest(received, secret)
+
+
+def _period_to_dates(period: str, period_start: Optional[date], period_end: Optional[date]):
+    """Resolve period_start / period_end from explicit dates or period string."""
+    if period_start and period_end:
+        return period_start, period_end
+    p = period.strip()
+    # YYYY-QN
+    if len(p) == 7 and p[4] == "-" and p[5] == "Q":
+        year = int(p[:4])
+        quarter = int(p[6])
+        start_month = (quarter - 1) * 3 + 1
+        end_month = start_month + 2
+        import calendar
+        ps = date(year, start_month, 1)
+        pe = date(year, end_month, calendar.monthrange(year, end_month)[1])
+        return ps, pe
+    # YYYY-MM
+    if len(p) == 7 and p[4] == "-":
+        import calendar
+        year, month = int(p[:4]), int(p[5:])
+        ps = date(year, month, 1)
+        pe = date(year, month, calendar.monthrange(year, month)[1])
+        return ps, pe
+    # YYYY
+    if len(p) == 4 and p.isdigit():
+        year = int(p)
+        return date(year, 1, 1), date(year, 12, 31)
+    raise ValueError(f"Cannot parse period '{period}' — use YYYY-QN, YYYY-MM, or YYYY")
+
+
+@router.post("/n8n/inbound/vat_assessed")
+async def inbound_vat_assessed(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_n8n_signature: Optional[str] = Header(default=None, alias="X-N8N-Signature"),
+):
+    """Receive signed VAT assessment from n8n and upsert vat_returns by company + period."""
+    secret = os.getenv("N8N_WEBHOOK_SECRET")
+    if not secret:
+        raise HTTPException(status_code=500, detail="N8N_WEBHOOK_SECRET is not configured")
+    if not x_n8n_signature:
+        raise HTTPException(status_code=401, detail="Missing X-N8N-Signature header")
+
+    raw_body = await request.body()
+    if not _verify_vat_signature(secret=secret, body=raw_body, received=x_n8n_signature):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    try:
+        payload = VATAssessedPayload.model_validate_json(raw_body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    company = db.query(Company).filter(Company.id == payload.company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    try:
+        ps, pe = _period_to_dates(payload.period, payload.period_start, payload.period_end)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    existing = db.query(VATReturn).filter(
+        and_(
+            VATReturn.company_id == payload.company_id,
+            VATReturn.period_start == ps,
+        )
+    ).first()
+
+    box_values = {
+        "box1_standard_rated_supplies": payload.box1_standard_rated_supplies,
+        "box2_vat_on_supplies": payload.box2_vat_on_supplies,
+        "box3_zero_rated_supplies": payload.box3_zero_rated_supplies,
+        "box4_exempt_supplies": payload.box4_exempt_supplies,
+        "box5_total_taxable_supplies": payload.box5_total_taxable_supplies,
+        "box6_taxable_expenses": payload.box6_taxable_expenses,
+        "box7_vat_on_expenses": payload.box7_vat_on_expenses,
+        "box8_vat_payable_or_refundable": payload.box8_vat_payable_or_refundable,
+    }
+
+    if existing:
+        for k, v in box_values.items():
+            setattr(existing, k, v)
+        vat_return = existing
+    else:
+        vat_return = VATReturn(
+            company_id=payload.company_id,
+            period_start=ps,
+            period_end=pe,
+            status="draft",
+            **box_values,
+        )
+        db.add(vat_return)
+
+    db.flush()
+
+    db.add(AuditLog(
+        company_id=payload.company_id,
+        actor="n8n",
+        entity_type="vat_return",
+        entity_id=vat_return.id,
+        action="assessed",
+        after_state={
+            "period": payload.period,
+            "box8": payload.box8_vat_payable_or_refundable,
+            "urgency_level": payload.urgency_level,
+            "is_overdue": payload.is_overdue,
+        },
+    ))
+
+    db.commit()
+    db.refresh(vat_return)
+    return {"status": "ok", "return_id": vat_return.id}
+
+
+@router.get("/returns")
+async def list_vat_returns(
+    company_id: int = Query(..., description="Company ID"),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """List VAT returns for a company."""
+    rows = (
+        db.query(VATReturn)
+        .filter(VATReturn.company_id == company_id)
+        .order_by(VATReturn.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "return_id": r.id,
+            "company_id": r.company_id,
+            "period_start": r.period_start,
+            "period_end": r.period_end,
+            "box8_vat_payable_or_refundable": r.box8_vat_payable_or_refundable,
+            "status": r.status,
+            "submission_status": r.submission_status,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
 
 
 @router.post("/reconcile/{vat_return_id}", response_model=ReconciliationResponse)
