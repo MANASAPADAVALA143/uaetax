@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
+import { apiClient } from "@/lib/api";
 
 const STORAGE_RETURNS = "gulftax_vat_returns";
 
@@ -50,8 +51,6 @@ function fmtAed(n: number | undefined): string {
 }
 
 export default function ReconPage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
   const [options, setOptions] = useState<StoredReturn[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [manualId, setManualId] = useState("");
@@ -82,8 +81,8 @@ export default function ReconPage() {
     setError(null);
     setResult(null);
     try {
-      const { data } = await axios.post<ReconcileResult>(
-        `${apiUrl}/api/vat/reconcile/${id}`
+      const { data } = await apiClient.post<ReconcileResult>(
+        `/api/vat/reconcile/${id}`
       );
       setResult(data);
     } catch (e: unknown) {

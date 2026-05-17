@@ -30,6 +30,20 @@ class Company(Base):
     reconciliation_results = relationship("ReconciliationResult", back_populates="company")
     einvoicing_assessments = relationship("EInvoicingAssessment", back_populates="company")
     audit_logs = relationship("AuditLog", back_populates="company")
+    user_companies = relationship("UserCompany", back_populates="company")
+
+
+class UserCompany(Base):
+    """Links Supabase auth users (UUID string) to integer-PK companies."""
+    __tablename__ = "user_companies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(255), nullable=False, index=True)   # Supabase UUID as string
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False, default="member")  # owner / admin / member
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company", back_populates="user_companies")
 
 
 class Transaction(Base):

@@ -1,6 +1,5 @@
 """VAT Classification API Router"""
 import os
-import sys
 import uuid
 import tempfile
 from datetime import date, datetime, timezone
@@ -13,16 +12,10 @@ import pandas as pd
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from middleware.auth import get_current_company_id
 
-# Add parent directory to path for RAG import
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-try:
-    from rag.uae_tax_rag import UAETaxRAG
-    RAG_AVAILABLE = True
-except ImportError:
-    RAG_AVAILABLE = False
-    print("Warning: RAG system not available")
+# pgvector-backed RAG service — import never fails; returns [] on any error
+from services.uae_tax_rag_pg import uae_tax_rag  # type: ignore
 
 from database import get_db
 from models import Transaction, Company, AuditLog
@@ -39,8 +32,7 @@ _BULK_CLASSIFY_EXCEL_PATHS: Dict[str, str] = {}
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 claude_client = Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
 
-# Initialize RAG system
-rag = UAETaxRAG() if RAG_AVAILABLE else None
+# uae_tax_rag singleton is imported above; always safe to call
 
 
 # Pydantic models for request/response
@@ -63,6 +55,7 @@ class ClassificationResult(BaseModel):
     reasoning: str
     flag_for_review: bool
     flag_reason: Optional[str] = None
+    uae_law_sources: Optional[List[str]] = None   # doc names used for classification
 
 
 class TransactionResponse(BaseModel):
@@ -130,45 +123,23 @@ def classify_with_claude_and_rag(
             detail="ANTHROPIC_API_KEY is not configured. Add it to backend/.env to use AI classification.",
         )
 
-    rag_results: List[Dict[str, Any]] = []
-    rag_citations: List[str] = []
-    rag_context = "RAG system not available."
+    # Retrieve UAE law context from pgvector (never raises)
+    rag_context, rag_sources = uae_tax_rag.retrieve_and_format(
+        query=f"{description} {transaction_type} {entity_type}",
+        law_type="VAT",
+    )
+    rag_citations: List[str] = rag_sources  # doc names used
 
-    if rag:
-        try:
-            vat_rules = rag.query(
-                f"{description} {transaction_type} {entity_type}",
-                collection_name="uae_vat_law",
-                n_results=3,
-            )
-            if entity_type in ["free_zone", "designated_zone"]:
-                fz_rules = rag.query(
-                    f"{description} {entity_type}",
-                    collection_name="free_zone_regulations",
-                    n_results=2,
-                )
-                rag_results = vat_rules + fz_rules
-            else:
-                rag_results = vat_rules
-
-            rag_context = "\n".join(
-                [
-                    f"- {rule['text']} (Category: {rule['metadata'].get('category', 'N/A')})"
-                    for rule in rag_results
-                ]
-            )
-            rag_citations = [
-                f"[{rule.get('metadata', {}).get('category', 'VAT')}] {rule.get('text', '')[:400]}"
-                for rule in rag_results[:8]
-            ]
-        except Exception as e:
-            print(f"RAG query error: {e}")
-            rag_context = "No relevant rules found in knowledge base."
-
-    # Step 2: Build Claude prompt
-    system_prompt = """You are a UAE VAT expert with deep knowledge of Federal Decree-Law No. 8 of 2017 and FTA clarifications. You classify transactions for UAE VAT returns with precision.
+    # Step 2: Build Claude prompt with RAG context
+    system_prompt = """You are a UAE VAT specialist with deep knowledge of Federal Decree-Law No. 8 of 2017 and FTA clarifications. You classify transactions for UAE VAT returns with precision.
 
 You must return ONLY valid JSON with no additional text, markdown, or code blocks."""
+
+    context_section = (
+        f"Relevant UAE VAT law context:\n{rag_context}"
+        if rag_context
+        else "No specific UAE law context retrieved — apply general UAE VAT rules."
+    )
 
     user_prompt = f"""Classify this UAE transaction:
 Description: {description}
@@ -176,7 +147,8 @@ Amount: AED {amount_aed}
 Party: {vendor_or_customer if vendor_or_customer else "Not specified"}
 Transaction type: {transaction_type}
 Entity type: {entity_type}
-Relevant tax rules: {rag_context}
+
+{context_section}
 
 Return JSON only:
 {{
@@ -234,6 +206,7 @@ Return JSON only:
             "flag_for_review": flag_for_review,
             "flag_reason": flag_reason,
             "rag_citations": rag_citations,
+            "uae_law_sources": rag_sources,
         }
 
     except json.JSONDecodeError as e:
@@ -248,6 +221,7 @@ Return JSON only:
             "flag_for_review": True,
             "flag_reason": "AI classification failed - JSON parsing error",
             "rag_citations": rag_citations,
+            "uae_law_sources": rag_sources,
         }
     except Exception as e:
         print(f"Claude API error: {e}")
@@ -260,24 +234,27 @@ Return JSON only:
             "flag_for_review": True,
             "flag_reason": f"AI classification error: {str(e)}",
             "rag_citations": rag_citations,
+            "uae_law_sources": rag_sources,
         }
 
 
 @router.post("/classify-transaction", response_model=ClassificationResult)
 async def classify_transaction(
     request: ClassifyTransactionRequest,
-    db: Session = Depends(get_db)
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """
     Classify a single transaction using RAG + Claude API.
     
     Returns classification result and saves to database.
     """
-    # Verify company exists
-    company = db.query(Company).filter(Company.id == request.company_id).first()
+    # company_id comes from the auth dependency — ignore any company_id in the request body
+    # to prevent cross-tenant data access
+    company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     # Use company's entity type if not provided
     entity_type = request.entity_type or company.entity_type
     
@@ -290,9 +267,9 @@ async def classify_transaction(
         entity_type=entity_type
     )
     
-    # Save to database
+    # Save to database — always use the verified company_id from auth
     transaction = Transaction(
-        company_id=request.company_id,
+        company_id=company_id,
         date=request.transaction_date or date.today(),
         description=request.description,
         amount_aed=request.amount_aed,
@@ -324,9 +301,9 @@ async def classify_transaction(
 @router.post("/classify-bulk")
 async def classify_bulk(
     file: UploadFile = File(...),
-    company_id: int = Query(..., description="Company ID"),
     entity_type: str = Query("mainland", pattern="^(mainland|free_zone|designated_zone)$"),
     transaction_type: str = Query("sale", pattern="^(sale|purchase)$"),
+    company_id: int = Depends(get_current_company_id),
     db: Session = Depends(get_db),
 ):
     """
@@ -523,24 +500,24 @@ async def download_classify_bulk_excel(job_id: str):
     )
 
 
-@router.get("/transactions/{company_id}", response_model=List[TransactionResponse])
+@router.get("/transactions", response_model=List[TransactionResponse])
 async def get_transactions(
-    company_id: int,
     period_start: Optional[date] = Query(None, description="Filter by period start date"),
     period_end: Optional[date] = Query(None, description="Filter by period end date"),
     vat_treatment: Optional[str] = Query(None, description="Filter by VAT treatment"),
     flag_for_review: Optional[bool] = Query(None, description="Filter by flag_for_review status"),
-    db: Session = Depends(get_db)
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """
     Get all classified transactions for a company with optional filters.
     """
-    # Verify company exists
+    # company_id already verified by auth dep
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    
-    # Build query
+
+    # Build query — always filter by the verified company_id
     query = db.query(Transaction).filter(Transaction.company_id == company_id)
     
     # Apply filters
@@ -567,12 +544,17 @@ async def get_transactions(
 async def verify_transaction(
     transaction_id: int,
     request: PatchVerifyTransactionRequest,
+    company_id: int = Depends(get_current_company_id),
     db: Session = Depends(get_db),
 ):
     """
     Verify or unverify a transaction; optionally override VAT treatment with audit trail.
     """
-    transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    transaction = (
+        db.query(Transaction)
+        .filter(Transaction.id == transaction_id, Transaction.company_id == company_id)
+        .first()
+    )
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
@@ -620,19 +602,19 @@ async def verify_transaction(
 @router.post("/transactions/bulk-verify")
 async def bulk_verify_transactions(
     body: BulkVerifyRequest,
+    company_id: int = Depends(get_current_company_id),
     db: Session = Depends(get_db),
 ):
     """Mark many transactions as verified."""
     unique_ids = list(dict.fromkeys(body.transaction_ids))
-    rows = db.query(Transaction).filter(Transaction.id.in_(unique_ids)).all()
+    # Filter by both IDs and company_id — prevents cross-tenant access
+    rows = (
+        db.query(Transaction)
+        .filter(Transaction.id.in_(unique_ids), Transaction.company_id == company_id)
+        .all()
+    )
     if len(rows) != len(unique_ids):
         raise HTTPException(status_code=404, detail="One or more transaction IDs not found")
-
-    company_ids = {r.company_id for r in rows}
-    if len(company_ids) != 1:
-        raise HTTPException(status_code=400, detail="All transactions must belong to the same company")
-
-    company_id = company_ids.pop()
     for t in rows:
         t.is_verified = True
         _append_verification_history(

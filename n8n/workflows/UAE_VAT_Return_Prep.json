@@ -148,7 +148,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://10.174.232.164:8001/api/vat/n8n/inbound/vat_assessed",
+        "url": "={{ $env.GULFTAX_BACKEND_URL }}/api/vat/n8n/inbound/vat_assessed",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

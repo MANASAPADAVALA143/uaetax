@@ -16,6 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
+from middleware.auth import get_current_company_id
 from models import Company, EInvoicingAssessment, GLImportResult
 
 router = APIRouter()
@@ -141,7 +142,7 @@ async def inbound_einvoicing_assessed(
 
 @router.get("/assessments")
 async def list_assessments(
-    company_id: int = Query(..., description="Company ID"),
+    company_id: int = Depends(get_current_company_id),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
@@ -171,7 +172,10 @@ async def list_assessments(
 
 
 @router.post("/trigger/{company_id}")
-async def trigger_einvoicing_assessment(company_id: int):
+async def trigger_einvoicing_assessment(
+    company_id: int,
+    _verified_id: int = Depends(get_current_company_id),
+):
     """Trigger n8n e-invoicing workflow for a company."""
     webhook_url = os.getenv("N8N_EINVOICING_WEBHOOK_URL")
     if not webhook_url:
@@ -247,15 +251,18 @@ async def inbound_gl_imported(
 
 @router.get("/gl-imports")
 async def list_gl_imports(
-    company_id: Optional[int] = Query(default=None, description="Optional company filter"),
+    verified_company_id: int = Depends(get_current_company_id),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """List recent GL import runs; excludes parsed rows for lightweight feed usage."""
-    query = db.query(GLImportResult)
-    if company_id is not None:
-        query = query.filter(GLImportResult.company_id == company_id)
-    rows = query.order_by(GLImportResult.created_at.desc()).limit(limit).all()
+    """List recent GL import runs for the verified company."""
+    rows = (
+        db.query(GLImportResult)
+        .filter(GLImportResult.company_id == verified_company_id)
+        .order_by(GLImportResult.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
     return [
         {

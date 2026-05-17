@@ -1,8 +1,10 @@
 """FastAPI main application"""
 import os
+from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from dotenv import load_dotenv
 
 from database import engine, Base
@@ -11,6 +13,7 @@ from routers.vat_return import router as vat_return_router
 from routers.dashboard import router as dashboard_router
 from routers import automations
 from routers import corporate_tax
+from routers.auth_router import router as auth_router
 
 # Load .env only in local dev — Railway injects env vars directly
 _env_file = Path(__file__).resolve().parent / ".env"
@@ -27,6 +30,7 @@ app = FastAPI(
     description="UAE Tax SaaS — VAT, Corporate Tax, E-Invoicing",
 )
 
+app.include_router(auth_router)
 app.include_router(vat_classifier_router)
 app.include_router(vat_return_router)
 app.include_router(dashboard_router)
@@ -34,6 +38,7 @@ app.include_router(automations.router, prefix="/api/automations", tags=["automat
 app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"])
 
 # CORS — allow production frontend + local dev
+# Authorization and X-Company-ID must be in allow_headers for auth to work
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:3000,http://127.0.0.1:3000"
@@ -44,7 +49,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "X-Company-ID", "Content-Type", "X-N8N-Signature", "*"],
 )
 
 
@@ -56,6 +61,36 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+@app.get("/api/health")
+async def health_check():
+    """Production health check — verifies DB connection and RAG availability."""
+    # Check DB
+    db_ok = False
+    try:
+        from database import engine
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    # Check RAG (pgvector service)
+    rag_ok = False
+    try:
+        from services.uae_tax_rag_pg import uae_tax_rag
+        rag_ok = uae_tax_rag.model is not None
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "backend_url": os.getenv("RAILWAY_BACKEND_URL", "not set"),
+        "rag_available": rag_ok,
+        "db_connected": db_ok,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 if __name__ == "__main__":

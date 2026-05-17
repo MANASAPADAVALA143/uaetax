@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import CompanySelector from "@/components/CompanySelector";
 
 export default function Nav() {
   const pathname = usePathname();
   const isDashboard = pathname?.startsWith("/dashboard");
+  const { user, signOut, loading } = useAuth();
 
   return (
     <nav
@@ -46,31 +49,41 @@ export default function Nav() {
         </ul>
       )}
 
-      {isDashboard && (
+      {isDashboard && !loading && (
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 bg-gold-pale border border-border-g rounded-full text-xs font-medium text-gold-lt font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-green animate-[blink_2s_infinite]" />
-            Al Baraka Trading LLC
-          </div>
-          <span className="text-xs text-muted font-mono">Q1 2025</span>
+          <CompanySelector />
+          {user?.email && (
+            <span className="text-xs text-muted font-mono hidden lg:block truncate max-w-[180px]">
+              {user.email}
+            </span>
+          )}
         </div>
       )}
 
       <div className="flex gap-2.5 items-center">
         {!isDashboard && (
           <Link
-            href="/dashboard"
+            href="/login"
             className="px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer border-none no-underline transition-all bg-transparent border border-border-g text-gold hover:bg-gold-pale"
           >
             Sign In
           </Link>
         )}
-        <Link
-          href="/dashboard"
-          className="px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer border-none no-underline transition-all bg-gradient-to-br from-gold to-gold-lt text-deep shadow-[0_4px_18px_rgba(201,168,76,0.38)] hover:shadow-[0_6px_24px_rgba(201,168,76,0.52)] hover:-translate-y-px"
-        >
-          {isDashboard ? "Dashboard" : "Open Dashboard →"}
-        </Link>
+        {isDashboard && user ? (
+          <button
+            onClick={() => signOut()}
+            className="px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer border border-border text-muted hover:text-white hover:border-[rgba(78,168,255,0.3)] transition-all bg-transparent"
+          >
+            Sign out
+          </button>
+        ) : (
+          <Link
+            href={isDashboard ? "/dashboard" : "/dashboard"}
+            className="px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer border-none no-underline transition-all bg-gradient-to-br from-gold to-gold-lt text-deep shadow-[0_4px_18px_rgba(201,168,76,0.38)] hover:shadow-[0_6px_24px_rgba(201,168,76,0.52)] hover:-translate-y-px"
+          >
+            {isDashboard ? "Dashboard" : "Open Dashboard →"}
+          </Link>
+        )}
       </div>
     </nav>
   );

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { apiClient } from "@/lib/api";
+import { useCompanyId } from "@/hooks/useAuth";
 
 /** Mirrors `scripts/generate_einvoicing_n8n.py` → `UAE_EInvoicing_Readiness.json` Code node. */
 type IntegrationStatus = "not_started" | "planning" | "testing" | "live";
@@ -167,8 +169,6 @@ interface AssessmentRecord {
 type LoadState = "idle" | "loading" | "ok" | "error";
 type ToastState = { kind: "success" | "error"; message: string } | null;
 
-const COMPANY_ID = 1;
-
 function validatePintAePaste(raw: string): FieldCheck[] {
   const t = raw.toLowerCase();
 
@@ -320,7 +320,7 @@ const ROADMAP_PHASES = [
 ] as const;
 
 export default function EInvoicingPage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const companyId = useCompanyId();
   const [tab, setTab] = useState(0);
   const [summaryState, setSummaryState] = useState<LoadState>("loading");
   const [historyState, setHistoryState] = useState<LoadState>("loading");
@@ -403,14 +403,14 @@ export default function EInvoicingPage() {
     setExpandedId(null);
     try {
       const [latestRes, historyRes] = await Promise.all([
-        axios.get<AssessmentRecord[]>(`${apiUrl}/api/automations/assessments`, {
-          params: { company_id: COMPANY_ID, limit: 1 },
+        apiClient.get<AssessmentRecord[]>(`/api/automations/assessments`, {
+          params: { limit: 1 },
           timeout: 15000,
-        }),
-        axios.get<AssessmentRecord[]>(`${apiUrl}/api/automations/assessments`, {
-          params: { company_id: COMPANY_ID, limit: 10 },
+        } as Parameters<typeof apiClient.get>[1]),
+        apiClient.get<AssessmentRecord[]>(`/api/automations/assessments`, {
+          params: { limit: 10 },
           timeout: 15000,
-        }),
+        } as Parameters<typeof apiClient.get>[1]),
       ]);
       setLatestAssessment(latestRes.data[0] ?? null);
       setHistory(historyRes.data ?? []);
@@ -451,9 +451,9 @@ export default function EInvoicingPage() {
   const onRequestAssessment = async () => {
     setIsTriggering(true);
     try {
-      await axios.post(`${apiUrl}/api/automations/trigger/${COMPANY_ID}`, undefined, {
+      await apiClient.post(`/api/automations/trigger/${companyId}`, undefined, {
         timeout: 15000,
-      });
+      } as Parameters<typeof apiClient.post>[2]);
       setToast({
         kind: "success",
         message: "Assessment requested — results will appear shortly",
@@ -500,7 +500,7 @@ export default function EInvoicingPage() {
           <div>
             <h3 className="text-lg font-semibold text-white">Readiness assessment</h3>
             <p className="text-[13px] text-muted mt-1">
-              Latest e-invoicing workflow outcome for company {COMPANY_ID}.
+              Latest e-invoicing workflow outcome for your company.
             </p>
           </div>
           <button

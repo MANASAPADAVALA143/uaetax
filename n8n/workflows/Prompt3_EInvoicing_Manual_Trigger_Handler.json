@@ -19,7 +19,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.GULFTAX_API_URL + '/api/dashboard/summary?company_id=' + $json.company_id }}"
+        "url": "={{ $env.GULFTAX_BACKEND_URL }}/api/dashboard/summary"
       },
       "id": "fetch-company",
       "name": "Fetch company data",
@@ -59,7 +59,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.GULFTAX_API_URL || 'http://10.174.232.164:8001') + '/api/automations/n8n/inbound/einvoicing_assessed' }}",
+        "url": "={{ $env.GULFTAX_BACKEND_URL }}/api/automations/n8n/inbound/einvoicing_assessed",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

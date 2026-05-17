@@ -16,12 +16,12 @@
 - ✅ ReconciliationResult model (mismatches JSON)
 - ✅ Alembic migrations created and ready
 
-### Prompt 3 - RAG System ✅
-- ✅ UAETaxRAG class with 4 collections
-- ✅ 12 VAT rules loaded
-- ✅ 3 Corporate Tax rules
-- ✅ 2 Free Zone regulations
-- ✅ `query()` and `get_vat_treatment()` methods working
+### Prompt 3 - RAG System ✅ (migrated to pgvector)
+- ✅ UAETaxRAG class — Supabase pgvector backend (production)
+- ✅ `retrieve_and_format()` with graceful fallback (never breaks classification)
+- ✅ `ingest_to_pgvector.py` — ingests UAE law PDFs into `uae_tax_kb` table
+- ✅ `supabase/migrations/004_pgvector_rag.sql` — pgvector table + ivfflat index
+- ✅ Legacy ChromaDB (`rag/uae_tax_rag.py`) kept for local dev only
 
 ### Prompt 4 - VAT Classification API ✅
 - ✅ POST `/api/vat/classify-transaction` - Single transaction
@@ -93,8 +93,10 @@ gulftax-ai/
 │   ├── models.py         # SQLAlchemy models
 │   ├── database.py       # PostgreSQL config
 │   └── scripts/          # Test data generator
-└── rag/                  # ChromaDB vector store
-    └── uae_tax_rag.py    # RAG system
+├── rag/                  # ChromaDB (local dev only)
+│   └── uae_tax_rag.py
+└── backend/services/
+    └── uae_tax_rag_pg.py # Supabase pgvector RAG (production)
 ```
 
 ## 🚀 Next Steps

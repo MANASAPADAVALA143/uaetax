@@ -28,6 +28,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import get_db
+from middleware.auth import get_current_company_id
 from models import (
     Transaction,
     Company,
@@ -365,7 +366,8 @@ def generate_excel_report(vat_return: VATReturn, company: Company, transactions:
 @router.post("/generate-return", response_model=VATReturnResponse)
 async def generate_return(
     request: GenerateReturnRequest,
-    db: Session = Depends(get_db)
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """
     Generate VAT return for a company and period.
@@ -373,15 +375,15 @@ async def generate_return(
     Pulls all verified transactions, calculates 8 FTA boxes,
     saves to database, and generates PDF/Excel reports.
     """
-    # Verify company exists
-    company = db.query(Company).filter(Company.id == request.company_id).first()
+    # Use auth-verified company_id, not request body
+    company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     # Get verified transactions for the period
     transactions = db.query(Transaction).filter(
         and_(
-            Transaction.company_id == request.company_id,
+            Transaction.company_id == company_id,
             Transaction.date >= request.period_start,
             Transaction.date <= request.period_end,
             Transaction.is_verified == True
@@ -397,7 +399,7 @@ async def generate_return(
     # Check if return already exists
     existing_return = db.query(VATReturn).filter(
         and_(
-            VATReturn.company_id == request.company_id,
+            VATReturn.company_id == company_id,
             VATReturn.period_start == request.period_start,
             VATReturn.period_end == request.period_end
         )
@@ -412,7 +414,7 @@ async def generate_return(
     else:
         # Create new return
         vat_return = VATReturn(
-            company_id=request.company_id,
+            company_id=company_id,
             period_start=request.period_start,
             period_end=request.period_end,
             **box_values,
@@ -441,59 +443,65 @@ async def generate_return(
         "status": vat_return.status,
         "created_at": vat_return.created_at,
         "pdf_url": f"/api/vat/returns/{vat_return.id}/pdf",
-        "excel_url": f"/api/vat/returns/{vat_return.id}/excel"
+        "excel_url": f"/api/vat/returns/{vat_return.id}/excel",
     }
 
 
 @router.get("/returns/{return_id}/pdf")
 async def get_return_pdf(
     return_id: int,
-    db: Session = Depends(get_db)
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """Download VAT return PDF"""
-    vat_return = db.query(VATReturn).filter(VATReturn.id == return_id).first()
+    vat_return = db.query(VATReturn).filter(
+        VATReturn.id == return_id, VATReturn.company_id == company_id
+    ).first()
     if not vat_return:
         raise HTTPException(status_code=404, detail="VAT return not found")
-    
-    company = db.query(Company).filter(Company.id == vat_return.company_id).first()
+
+    company = db.query(Company).filter(Company.id == company_id).first()
     transactions = db.query(Transaction).filter(
         and_(
-            Transaction.company_id == vat_return.company_id,
+            Transaction.company_id == company_id,
             Transaction.date >= vat_return.period_start,
             Transaction.date <= vat_return.period_end,
-            Transaction.is_verified == True
+            Transaction.is_verified == True,
         )
     ).all()
-    
+
     pdf_content = generate_pdf_report(vat_return, company, transactions)
-    
+
     return StreamingResponse(
         io.BytesIO(pdf_content),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=vat_return_{return_id}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=vat_return_{return_id}.pdf"},
     )
 
 
 @router.get("/returns/{return_id}/excel")
 async def get_return_excel(
     return_id: int,
-    db: Session = Depends(get_db)
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """Download VAT return Excel"""
-    vat_return = db.query(VATReturn).filter(VATReturn.id == return_id).first()
+    vat_return = db.query(VATReturn).filter(
+        VATReturn.id == return_id, VATReturn.company_id == company_id
+    ).first()
     if not vat_return:
         raise HTTPException(status_code=404, detail="VAT return not found")
-    
-    company = db.query(Company).filter(Company.id == vat_return.company_id).first()
+
+    company = db.query(Company).filter(Company.id == company_id).first()
     transactions = db.query(Transaction).filter(
         and_(
-            Transaction.company_id == vat_return.company_id,
+            Transaction.company_id == company_id,
             Transaction.date >= vat_return.period_start,
             Transaction.date <= vat_return.period_end,
-            Transaction.is_verified == True
+            Transaction.is_verified == True,
         )
     ).all()
-    
+
     excel_content = generate_excel_report(vat_return, company, transactions)
     
     return StreamingResponse(
@@ -506,6 +514,7 @@ async def get_return_excel(
 @router.post("/returns/{return_id}/submit", response_model=VATSubmitResponse)
 async def submit_vat_return(
     return_id: int,
+    company_id: int = Depends(get_current_company_id),
     db: Session = Depends(get_db),
 ):
     """
@@ -514,7 +523,9 @@ async def submit_vat_return(
     For now this route records an attempted submission and marks the return as failed
     with a stubbed integration error, so frontend flows can handle a stable contract.
     """
-    vat_return = db.query(VATReturn).filter(VATReturn.id == return_id).first()
+    vat_return = db.query(VATReturn).filter(
+        VATReturn.id == return_id, VATReturn.company_id == company_id
+    ).first()
     if not vat_return:
         raise HTTPException(status_code=404, detail="VAT return not found")
 
@@ -712,7 +723,7 @@ async def inbound_vat_assessed(
 
 @router.get("/returns")
 async def list_vat_returns(
-    company_id: int = Query(..., description="Company ID"),
+    company_id: int = Depends(get_current_company_id),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
@@ -742,7 +753,8 @@ async def list_vat_returns(
 @router.post("/reconcile/{vat_return_id}", response_model=ReconciliationResponse)
 async def reconcile_return(
     vat_return_id: int,
-    db: Session = Depends(get_db)
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """
     Reconcile VAT return with invoice transactions.
@@ -750,15 +762,17 @@ async def reconcile_return(
     Compares invoice totals by treatment against VAT return boxes,
     finds mismatches > AED 100, and provides AI recommendations.
     """
-    # Get VAT return
-    vat_return = db.query(VATReturn).filter(VATReturn.id == vat_return_id).first()
+    # Get VAT return — must belong to the verified company
+    vat_return = db.query(VATReturn).filter(
+        VATReturn.id == vat_return_id, VATReturn.company_id == company_id
+    ).first()
     if not vat_return:
         raise HTTPException(status_code=404, detail="VAT return not found")
-    
+
     # Get all transactions for the period
     transactions = db.query(Transaction).filter(
         and_(
-            Transaction.company_id == vat_return.company_id,
+            Transaction.company_id == company_id,
             Transaction.date >= vat_return.period_start,
             Transaction.date <= vat_return.period_end
         )
@@ -904,7 +918,7 @@ Return only the recommendation text, no markdown or formatting."""
     
     # Save reconciliation result
     reconciliation = ReconciliationResult(
-        company_id=vat_return.company_id,
+        company_id=company_id,
         vat_return_id=vat_return_id,
         total_invoices_aed=sum(invoice_totals.values()),
         total_output_vat_aed=invoice_output_vat,

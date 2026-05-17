@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 const STORAGE_SETTINGS = "gulftax_company_settings";
 
@@ -12,43 +13,52 @@ interface CompanySettings {
   entityType: EntityType;
 }
 
-const DEFAULTS: CompanySettings = {
-  companyName: "Al Baraka Trading LLC",
-  trn: "100123456700003",
-  entityType: "mainland",
-};
-
-function loadSettings(): CompanySettings {
-  if (typeof window === "undefined") return DEFAULTS;
+function loadSettings(defaults: CompanySettings): CompanySettings {
+  if (typeof window === "undefined") return defaults;
   try {
     const raw = localStorage.getItem(STORAGE_SETTINGS);
-    if (!raw) return DEFAULTS;
+    if (!raw) return defaults;
     const p = JSON.parse(raw) as Partial<CompanySettings>;
     return {
-      companyName: typeof p.companyName === "string" ? p.companyName : DEFAULTS.companyName,
-      trn: typeof p.trn === "string" ? p.trn : DEFAULTS.trn,
+      companyName: typeof p.companyName === "string" ? p.companyName : defaults.companyName,
+      trn: typeof p.trn === "string" ? p.trn : defaults.trn,
       entityType:
         p.entityType === "free_zone" || p.entityType === "designated_zone"
           ? p.entityType
-          : "mainland",
+          : defaults.entityType,
     };
   } catch {
-    return DEFAULTS;
+    return defaults;
   }
 }
 
 export default function SettingsPage() {
-  const [companyName, setCompanyName] = useState(DEFAULTS.companyName);
-  const [trn, setTrn] = useState(DEFAULTS.trn);
-  const [entityType, setEntityType] = useState<EntityType>(DEFAULTS.entityType);
+  const { activeCompany, user } = useAuth();
+
+  const defaults: CompanySettings = {
+    companyName: activeCompany?.company_name ?? "",
+    trn: activeCompany?.trn ?? "",
+    entityType: (activeCompany?.entity_type as EntityType | undefined) ?? "mainland",
+  };
+
+  const [companyName, setCompanyName] = useState(defaults.companyName);
+  const [trn, setTrn] = useState(defaults.trn);
+  const [entityType, setEntityType] = useState<EntityType>(defaults.entityType);
   const [savedFlash, setSavedFlash] = useState(false);
 
+  // Seed from AuthContext once loaded
   useEffect(() => {
-    const s = loadSettings();
+    if (!activeCompany) return;
+    const serverDefaults: CompanySettings = {
+      companyName: activeCompany.company_name,
+      trn: activeCompany.trn ?? "",
+      entityType: (activeCompany.entity_type as EntityType) ?? "mainland",
+    };
+    const s = loadSettings(serverDefaults);
     setCompanyName(s.companyName);
     setTrn(s.trn);
     setEntityType(s.entityType);
-  }, []);
+  }, [activeCompany]);
 
   const handleSave = () => {
     const payload: CompanySettings = { companyName, trn, entityType };
@@ -69,7 +79,7 @@ export default function SettingsPage() {
         </div>
         <h2 className="font-playfair text-[26px] font-bold">Workspace preferences</h2>
         <p className="text-[13px] text-muted mt-1">
-          Company profile is stored in this browser only until Supabase auth ships (Prompt 5).
+          {user?.email ? `Signed in as ${user.email}` : "Workspace preferences"}
         </p>
       </div>
 

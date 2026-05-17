@@ -3,10 +3,16 @@
 ## ✅ Pre-Launch Verification
 
 ### Backend Setup
-- [ ] PostgreSQL database created: `createdb gulftax_ai`
+- [ ] PostgreSQL / Supabase database created
 - [ ] Backend `.env` file created with:
   - [ ] `ANTHROPIC_API_KEY=sk-ant-...`
-  - [ ] `DATABASE_URL=postgresql://user:password@localhost:5432/gulftax_ai`
+  - [ ] `DATABASE_URL=postgresql://postgres:...@db.xxx.supabase.co:5432/postgres`
+  - [ ] `SUPABASE_URL=https://xxx.supabase.co`
+  - [ ] `SUPABASE_SERVICE_ROLE_KEY=eyJ...`
+  - [ ] `SUPABASE_JWT_SECRET=...`
+  - [ ] `RAILWAY_BACKEND_URL=https://your-app.up.railway.app`
+- [ ] pgvector SQL migration applied in Supabase SQL editor (`supabase/migrations/004_pgvector_rag.sql`)
+- [ ] UAE law PDFs ingested: `python backend/scripts/ingest_to_pgvector.py`
 - [ ] Dependencies installed: `pip install -r requirements.txt`
 - [ ] Migrations run: `alembic upgrade head`
 - [ ] Backend starts: `uvicorn main:app --reload` (port 8000)
@@ -73,11 +79,14 @@ If Box 8 matches, your entire pipeline is working! 🎉
 - Check DATABASE_URL in `.env`
 - Ensure database exists: `psql -l | grep gulftax_ai`
 
-### Issue: "RAG system not available"
-**Fix:** 
-- Check ChromaDB installed: `pip install chromadb`
-- Verify `rag/` directory exists
-- RAG will auto-create `rag/chroma_db/` on first run
+### Issue: "RAG system not available" / `rag_available: false` in `/api/health`
+**Fix:**
+- Verify `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set in `.env`
+- Run the ingest script to populate the knowledge base:
+  `python backend/scripts/ingest_to_pgvector.py`
+- Confirm pgvector migration was applied in Supabase SQL editor:
+  `supabase/migrations/004_pgvector_rag.sql`
+- Test locally: `python scripts/test_rag.py`
 
 ### Issue: "CORS error in browser"
 **Fix:** Check `backend/main.py` has CORS middleware with `http://localhost:3000`

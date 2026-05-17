@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python312", "gcc", "libffi", "openssl"]
+nixPkgs = ["python312", "gcc", "libffi", "openssl", "zlib"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
@@ -7,3 +7,9 @@ cmds = ["pip install -r requirements.txt"]
 [start]
 # alembic runs at start-time so Railway env vars (DATABASE_URL etc.) are available
 cmd = "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT"
+
+[variables]
+# Prevent sentence-transformers tokenizer warning/hang in non-interactive envs
+TOKENIZERS_PARALLELISM = "false"
+# Cache model weights in /tmp so they survive within a single Railway run
+SENTENCE_TRANSFORMERS_HOME = "/tmp/st_models"

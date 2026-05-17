@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import axios from "axios";
-
-const COMPANY_ID = 1;
+import { apiClient } from "@/lib/api";
 const STORAGE_RETURNS = "gulftax_vat_returns";
 
 type Quarter = 1 | 2 | 3 | 4;
@@ -83,7 +82,6 @@ function fmtAed(n: number): string {
 }
 
 export default function VATReturnPage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [quarter, setQuarter] = useState<Quarter>(1);
   const [year, setYear] = useState(2025);
@@ -101,8 +99,7 @@ export default function VATReturnPage() {
     setError(null);
     setStatus(null);
     try {
-      const { data } = await axios.post(`${apiUrl}/api/vat/generate-return`, {
-        company_id: COMPANY_ID,
+      const { data } = await apiClient.post(`/api/vat/generate-return`, {
         period_start: period.period_start,
         period_end: period.period_end,
       });
@@ -143,7 +140,7 @@ export default function VATReturnPage() {
     setError(null);
     try {
       const path = kind === "pdf" ? "pdf" : "excel";
-      const res = await axios.get(`${apiUrl}/api/vat/returns/${returnId}/${path}`, {
+      const res = await apiClient.get(`/api/vat/returns/${returnId}/${path}`, {
         responseType: "blob",
       });
       const blob = new Blob([res.data], {
@@ -178,7 +175,7 @@ export default function VATReturnPage() {
           </div>
           <h2 className="font-playfair text-[26px] font-bold">FTA VAT return (8 boxes)</h2>
           <p className="text-[13px] text-muted mt-1">
-            Company ID {COMPANY_ID} · verified transactions in period · live API
+            Verified transactions in period · live API
           </p>
         </div>
       </div>

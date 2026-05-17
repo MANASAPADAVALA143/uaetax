@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
+from middleware.auth import get_current_company_id
 from models import CTReturn
 
 load_dotenv()
@@ -60,7 +61,11 @@ def _json_from_claude_text(text: str) -> Dict[str, Any]:
 
 
 @router.post("/calculate")
-async def calculate_ct(request: CalculateCTRequest, db: Session = Depends(get_db)):
+async def calculate_ct(
+    request: CalculateCTRequest,
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
     total_addbacks = sum(_as_decimal(item.amount) for item in request.addbacks)
     total_deductions = sum(_as_decimal(item.amount) for item in request.deductions)
     accounting_profit = _as_decimal(request.accounting_profit)
@@ -89,7 +94,7 @@ async def calculate_ct(request: CalculateCTRequest, db: Session = Depends(get_db
     )
 
     ct_return = CTReturn(
-        company_id=request.company_id,
+        company_id=company_id,
         tax_period_start=request.tax_period_start,
         tax_period_end=request.tax_period_end,
         accounting_profit=accounting_profit,
@@ -132,7 +137,7 @@ async def calculate_ct(request: CalculateCTRequest, db: Session = Depends(get_db
 
 @router.get("/returns")
 async def list_ct_returns(
-    company_id: int = Query(...),
+    company_id: int = Depends(get_current_company_id),
     db: Session = Depends(get_db),
 ):
     rows = (
@@ -159,8 +164,14 @@ async def list_ct_returns(
 
 
 @router.get("/returns/{return_id}")
-async def get_ct_return(return_id: int, db: Session = Depends(get_db)):
-    row = db.query(CTReturn).filter(CTReturn.id == return_id).first()
+async def get_ct_return(
+    return_id: int,
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    row = db.query(CTReturn).filter(
+        CTReturn.id == return_id, CTReturn.company_id == company_id
+    ).first()
     if not row:
         raise HTTPException(status_code=404, detail="CT return not found")
     return {
@@ -182,7 +193,10 @@ async def get_ct_return(return_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/suggest-addbacks")
-async def suggest_addbacks(payload: SuggestAddbacksRequest):
+async def suggest_addbacks(
+    payload: SuggestAddbacksRequest,
+    _company_id: int = Depends(get_current_company_id),
+):
     if claude_client is None:
         raise HTTPException(
             status_code=503,

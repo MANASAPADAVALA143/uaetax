@@ -2,8 +2,7 @@
 
 import { useState, useRef } from "react";
 import axios from "axios";
-
-const COMPANY_ID = 1;
+import { apiClient } from "@/lib/api";
 
 interface ClassificationResult {
   description: string;
@@ -41,9 +40,8 @@ export default function VATClassifier() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await axios.post(
-        `${apiUrl}/api/vat/classify-bulk?company_id=${COMPANY_ID}&entity_type=mainland&transaction_type=sale`,
+      const response = await apiClient.post(
+        `/api/vat/classify-bulk?entity_type=mainland&transaction_type=sale`,
         formData,
         {
           headers: {

@@ -269,7 +269,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.GULFTAX_API_URL || 'http://127.0.0.1:8000') + '/api/automations/n8n/inbound/einvoicing_assessed' }}",
+        "url": "={{ $env.GULFTAX_BACKEND_URL }}/api/automations/n8n/inbound/einvoicing_assessed",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

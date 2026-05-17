@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import axios from "axios";
-
-const COMPANY_ID = 1;
+import { apiClient } from "@/lib/api";
+import { useCompanyId } from "@/hooks/useAuth";
 
 interface DashboardSummary {
   current_period: {
@@ -81,17 +80,18 @@ function KpiSkeleton() {
 }
 
 export default function DashboardOverview() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const companyId = useCompanyId();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
 
   useEffect(() => {
+    if (!companyId) return;
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await axios.get<DashboardSummary>(
-          `${apiUrl}/api/dashboard/summary`,
-          { params: { company_id: COMPANY_ID }, timeout: 15000 }
+        const { data } = await apiClient.get<DashboardSummary>(
+          `/api/dashboard/summary`,
+          { timeout: 15000 } as Parameters<typeof apiClient.get>[1]
         );
         if (!cancelled) {
           setSummary(data);
@@ -107,7 +107,8 @@ export default function DashboardOverview() {
     return () => {
       cancelled = true;
     };
-  }, [apiUrl]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
 
   const s = loadState === "ok" ? summary : null;
 
