@@ -1,14 +1,12 @@
-providers = ["python"]
-
 [phases.setup]
-nixPkgs = ["python312", "gcc", "libffi", "openssl", "zlib"]
+nixPkgs = ["python312", "python312Packages.pip", "gcc", "libffi", "openssl", "zlib"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = ["python3 -m pip install -r requirements.txt"]
 
 [start]
 # alembic runs at start-time so Railway env vars (DATABASE_URL etc.) are available
-cmd = "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = "python3 -m alembic upgrade head && python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT"
 
 [variables]
 # Prevent sentence-transformers tokenizer warning/hang in non-interactive envs
