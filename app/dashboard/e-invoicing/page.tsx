@@ -426,7 +426,7 @@ export default function EInvoicingPage() {
 
   useEffect(() => {
     fetchAssessments();
-  }, [apiUrl]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
