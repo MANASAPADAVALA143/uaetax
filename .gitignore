@@ -60,3 +60,4 @@ rag/chroma_db/
 .idea/
 *.swp
 *.swo
+.claude/
