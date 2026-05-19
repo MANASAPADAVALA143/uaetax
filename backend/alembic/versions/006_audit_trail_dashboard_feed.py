@@ -37,7 +37,9 @@ def upgrade() -> None:
             )
 
     # Backwards-compatible alias expected by some scripts/prompts.
-    op.execute("CREATE VIEW IF NOT EXISTS audit_log AS SELECT * FROM audit_logs")
+    # PostgreSQL does not support CREATE VIEW IF NOT EXISTS — drop first.
+    op.execute("DROP VIEW IF EXISTS audit_log")
+    op.execute("CREATE VIEW audit_log AS SELECT * FROM audit_logs")
 
 
 def downgrade() -> None:
