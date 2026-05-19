@@ -14,7 +14,7 @@ interface StoredReturn {
 }
 
 function quarterToRange(q: Quarter, year: number): { period_start: string; period_end: string } {
-  const ranges: Record<Quarter, [number, number, number, number]> = {
+  const ranges: Record<Quarter, [number, number, number, number, number, number]> = {
     1: [year, 1, 1, year, 3, 31],
     2: [year, 4, 1, year, 6, 30],
     3: [year, 7, 1, year, 9, 30],
