@@ -1,7 +1,9 @@
 """VAT Classification API Router"""
+import asyncio
 import os
 import uuid
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Query
@@ -354,10 +356,8 @@ async def classify_bulk(
 
         has_tx_type_col = "transaction_type" in df.columns
 
-        db_transactions: List[Transaction] = []
-        excel_rows: List[Dict[str, Any]] = []
-        per_row_meta: List[Dict[str, Any]] = []
-
+        # ── Build row specs (parse before parallelising) ──────────────────────
+        row_specs: List[Dict[str, Any]] = []
         for _, row in df.iterrows():
             description = str(row[description_col]) if pd.notna(row[description_col]) else ""
             if not description.strip():
@@ -382,24 +382,50 @@ async def classify_bulk(
             invoice_num = (
                 str(row[invoice_col]) if invoice_col and pd.notna(row.get(invoice_col, "")) else None
             )
+            row_specs.append({
+                "description": description,
+                "amount": amount,
+                "vendor": vendor,
+                "trans_date": trans_date,
+                "invoice_num": invoice_num,
+                "row_tx_type": row_tx_type,
+                "raw_row": {str(c): row.get(c) for c in df.columns},
+            })
 
-            classification = classify_with_claude_and_rag(
-                description=description,
-                amount_aed=amount,
-                vendor_or_customer=vendor,
-                transaction_type=row_tx_type,
+        if not row_specs:
+            raise HTTPException(status_code=400, detail="No classifiable rows found in file.")
+
+        # ── Classify all rows IN PARALLEL (ThreadPoolExecutor) ────────────────
+        def _classify_one(spec: Dict[str, Any]) -> Dict[str, Any]:
+            return classify_with_claude_and_rag(
+                description=spec["description"],
+                amount_aed=spec["amount"],
+                vendor_or_customer=spec["vendor"],
+                transaction_type=spec["row_tx_type"],
                 entity_type=entity_type,
             )
 
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=min(10, len(row_specs))) as pool:
+            classifications: List[Dict[str, Any]] = await asyncio.gather(
+                *[loop.run_in_executor(pool, _classify_one, spec) for spec in row_specs]
+            )
+
+        # ── Build DB objects and response rows ────────────────────────────────
+        db_transactions: List[Transaction] = []
+        excel_rows: List[Dict[str, Any]] = []
+        per_row_meta: List[Dict[str, Any]] = []
+
+        for spec, classification in zip(row_specs, classifications):
             db_transaction = Transaction(
                 company_id=company_id,
-                date=trans_date,
-                description=description,
-                amount_aed=amount,
-                vendor_or_customer=vendor,
-                invoice_number=invoice_num,
+                date=spec["trans_date"],
+                description=spec["description"],
+                amount_aed=spec["amount"],
+                vendor_or_customer=spec["vendor"],
+                invoice_number=spec["invoice_num"],
                 vat_treatment=classification["vat_treatment"],
-                transaction_type=row_tx_type,
+                transaction_type=spec["row_tx_type"],
                 vat_amount_aed=classification["vat_amount_aed"],
                 confidence_score=classification["confidence_score"] * 100,
                 ai_reasoning=classification["reasoning"],
@@ -407,7 +433,7 @@ async def classify_bulk(
             )
             db_transactions.append(db_transaction)
 
-            excel_row = {str(c): row.get(c) for c in df.columns}
+            excel_row = spec["raw_row"].copy()
             excel_row.update(
                 {
                     "gulftax_transaction_id": None,
@@ -418,7 +444,7 @@ async def classify_bulk(
                     "reasoning": classification["reasoning"],
                     "needs_review": classification["flag_for_review"],
                     "flag_reason": classification.get("flag_reason"),
-                    "transaction_type": row_tx_type,
+                    "transaction_type": spec["row_tx_type"],
                 }
             )
             excel_rows.append(excel_row)
@@ -429,9 +455,6 @@ async def classify_bulk(
                     "vat_rate": float(classification["vat_rate"]),
                 }
             )
-
-        if not db_transactions:
-            raise HTTPException(status_code=400, detail="No classifiable rows found in file.")
 
         db.add_all(db_transactions)
         db.commit()

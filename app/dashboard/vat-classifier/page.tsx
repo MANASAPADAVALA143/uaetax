@@ -47,6 +47,7 @@ export default function VATClassifier() {
           headers: {
             "Content-Type": "multipart/form-data",
           },
+          timeout: 120_000, // 2 min — 20 rows × Claude = ~60s
         }
       );
 
