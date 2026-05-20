@@ -299,7 +299,7 @@ async def classify_transaction(
 
 
 @router.post("/classify-bulk")
-async def classify_bulk(
+def classify_bulk(
     file: UploadFile = File(...),
     entity_type: str = Query("mainland", pattern="^(mainland|free_zone|designated_zone)$"),
     transaction_type: str = Query("sale", pattern="^(sale|purchase)$"),
