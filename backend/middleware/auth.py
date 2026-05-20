@@ -22,44 +22,43 @@ ROLE_ORDER = {"member": 0, "admin": 1, "owner": 2}
 # ── JWT verification ────────────────────────────────────────────
 def _verify_jwt(token: str) -> dict:
     """
-    Verify a Supabase-issued JWT locally using the JWT secret (HS256).
-    Falls back to a live Supabase API call when no secret is configured.
+    Verify a Supabase-issued JWT via the Supabase Auth REST API.
+
+    Supabase has migrated from legacy HS256 secrets to new ECDSA signing keys,
+    so local JWT verification is unreliable. We always verify via the Supabase
+    API which works regardless of signing algorithm.
     """
-    secret = os.getenv("SUPABASE_JWT_SECRET", "")
+    # Support both SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL env var names
+    supabase_url = (
+        os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or ""
+    ).strip().rstrip("/")
+    service_key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    ).strip()
 
-    if secret:
-        try:
-            from jose import JWTError, jwt as jose_jwt
-            payload = jose_jwt.decode(
-                token,
-                secret,
-                algorithms=["HS256"],
-                options={"verify_aud": False},
-            )
-            return {"user_id": payload.get("sub", ""), "email": payload.get("email", "")}
-        except JWTError as exc:
-            raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
-
-    # ── Fallback: call Supabase REST API ──
-    supabase_url = os.getenv("SUPABASE_URL", "")
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     if not supabase_url:
         raise HTTPException(
             status_code=500,
-            detail="Auth not configured — set SUPABASE_JWT_SECRET or SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY",
+            detail="Auth not configured — set SUPABASE_URL in backend environment variables",
         )
+
     try:
         import httpx
         resp = httpx.get(
             f"{supabase_url}/auth/v1/user",
-            headers={"Authorization": f"Bearer {token}", "apikey": service_key},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "apikey": service_key,
+            },
             timeout=10,
         )
         if resp.status_code != 200:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
         data = resp.json()
         return {"user_id": data.get("id", ""), "email": data.get("email", "")}
-    except httpx.RequestError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Auth service unreachable: {exc}") from exc
 
 
