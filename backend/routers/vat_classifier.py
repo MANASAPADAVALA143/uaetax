@@ -1,9 +1,7 @@
 """VAT Classification API Router"""
-import asyncio
 import os
 import uuid
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Query
@@ -395,21 +393,68 @@ async def classify_bulk(
         if not row_specs:
             raise HTTPException(status_code=400, detail="No classifiable rows found in file.")
 
-        # ── Classify all rows IN PARALLEL (ThreadPoolExecutor) ────────────────
-        def _classify_one(spec: Dict[str, Any]) -> Dict[str, Any]:
-            return classify_with_claude_and_rag(
-                description=spec["description"],
-                amount_aed=spec["amount"],
-                vendor_or_customer=spec["vendor"],
-                transaction_type=spec["row_tx_type"],
-                entity_type=entity_type,
-            )
+        # ── Classify ALL rows in ONE Claude API call (batch) ─────────────────
+        if claude_client is None:
+            raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured.")
 
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=min(10, len(row_specs))) as pool:
-            classifications: List[Dict[str, Any]] = await asyncio.gather(
-                *[loop.run_in_executor(pool, _classify_one, spec) for spec in row_specs]
+        batch_items = "\n".join(
+            f'{i+1}. description="{s["description"]}" | amount={s["amount"]} AED'
+            f' | party="{s["vendor"] or "N/A"}" | type={s["row_tx_type"]}'
+            for i, s in enumerate(row_specs)
+        )
+
+        batch_prompt = f"""You are a UAE VAT expert. Classify each transaction under Federal Decree-Law No.8 of 2017.
+
+Entity type: {entity_type}
+
+Transactions:
+{batch_items}
+
+Return a JSON array (one object per transaction, in the same order). Each object:
+{{
+  "index": <1-based int>,
+  "vat_treatment": "standard_rated|zero_rated|exempt|out_of_scope|reverse_charge",
+  "vat_rate": 5 or 0,
+  "vat_amount_aed": <net_amount * rate/100>,
+  "confidence_score": <0.0-1.0>,
+  "reasoning": "<one sentence citing UAE VAT law>",
+  "flag_for_review": true or false,
+  "flag_reason": "<string or null>"
+}}
+
+Return ONLY the JSON array. No markdown, no preamble."""
+
+        try:
+            msg = claude_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                temperature=0.1,
+                messages=[{"role": "user", "content": batch_prompt}],
             )
+            raw_text = msg.content[0].text.strip()
+            if "```" in raw_text:
+                raw_text = raw_text.split("```")[1].split("```")[0].strip()
+                if raw_text.startswith("json"):
+                    raw_text = raw_text[4:].strip()
+            batch_results: List[Dict[str, Any]] = json.loads(raw_text)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Batch classification failed: {exc}")
+
+        # Map results back by index (Claude returns in order but be safe)
+        result_map = {r["index"]: r for r in batch_results}
+        classifications: List[Dict[str, Any]] = []
+        for i, spec in enumerate(row_specs):
+            r = result_map.get(i + 1, {})
+            classifications.append({
+                "vat_treatment": r.get("vat_treatment", "standard_rated"),
+                "vat_rate": r.get("vat_rate", 5),
+                "vat_amount_aed": r.get("vat_amount_aed", spec["amount"] * 0.05),
+                "confidence_score": r.get("confidence_score", 0.8),
+                "reasoning": r.get("reasoning", "Classified under UAE VAT Law"),
+                "flag_for_review": r.get("flag_for_review", False),
+                "flag_reason": r.get("flag_reason"),
+                "rag_citations": [],
+            })
 
         # ── Build DB objects and response rows ────────────────────────────────
         db_transactions: List[Transaction] = []
