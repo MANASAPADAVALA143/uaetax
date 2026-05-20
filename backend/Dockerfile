@@ -21,8 +21,11 @@ RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceT
 # Copy application code
 COPY . .
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Expose port (Railway injects $PORT at runtime)
 EXPOSE 8000
 
-# Run migrations then start server
-CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run migrations then start server via startup script
+CMD ["./start.sh"]
