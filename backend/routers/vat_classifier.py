@@ -324,7 +324,24 @@ def classify_bulk(
         if lower.endswith(".csv"):
             df = pd.read_csv(file.file)
         elif lower.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(file.file)
+            # Auto-detect header row — scan first 6 rows for one that looks like headers
+            raw = pd.read_excel(file.file, engine="openpyxl", header=None)
+            header_row = 0
+            HEADER_KEYWORDS = {"desc", "amount", "date", "vendor", "supplier", "customer",
+                               "invoice", "transaction", "type", "treatment", "notes"}
+            for i in range(min(6, len(raw))):
+                row_vals = " ".join(str(v).lower() for v in raw.iloc[i].dropna().values)
+                hits = sum(1 for kw in HEADER_KEYWORDS if kw in row_vals)
+                if hits >= 2:
+                    header_row = i
+                    break
+            df = pd.read_excel(
+                raw.to_csv(index=False).encode(),  # re-read from detected header
+                header=header_row,
+                engine=None,
+            ) if False else raw.iloc[header_row + 1:].copy()
+            df.columns = [str(v).strip() for v in raw.iloc[header_row].values]
+            df = df.reset_index(drop=True)
         else:
             raise HTTPException(
                 status_code=400,
@@ -333,24 +350,31 @@ def classify_bulk(
 
         df.columns = df.columns.str.strip().str.lower()
 
+        # Drop rows where all values are NaN (title/spacer rows)
+        df = df.dropna(how="all").reset_index(drop=True)
+
         description_col = amount_col = vendor_col = date_col = invoice_col = None
         for col in df.columns:
-            col_lower = col.lower()
-            if "desc" in col_lower or "transaction" in col_lower or "item" in col_lower:
+            col_lower = str(col).lower()
+            if "desc" in col_lower:
                 description_col = col
-            elif "amount" in col_lower or "value" in col_lower or "total" in col_lower:
+            elif col_lower in ("amount aed", "amount_aed", "net amount aed") or (
+                "amount" in col_lower and "vat" not in col_lower and "total" not in col_lower
+            ):
                 amount_col = col
-            elif "vendor" in col_lower or "customer" in col_lower or "supplier" in col_lower or "party" in col_lower:
+            elif not amount_col and ("value" in col_lower or "total" in col_lower):
+                amount_col = col
+            if "vendor" in col_lower or "customer" in col_lower or "supplier" in col_lower:
                 vendor_col = col
-            elif "date" in col_lower:
+            if col_lower == "date" or col_lower.startswith("date"):
                 date_col = col
-            elif "invoice" in col_lower:
+            if "invoice" in col_lower:
                 invoice_col = col
 
         if not description_col:
-            raise HTTPException(status_code=400, detail="Could not find description column in file.")
+            raise HTTPException(status_code=400, detail=f"No description column found. Columns detected: {list(df.columns)}")
         if not amount_col:
-            raise HTTPException(status_code=400, detail="Could not find amount column in file.")
+            raise HTTPException(status_code=400, detail=f"No amount column found. Columns detected: {list(df.columns)}")
 
         has_tx_type_col = "transaction_type" in df.columns
 
@@ -429,6 +453,7 @@ Return ONLY the JSON array. No markdown, no preamble."""
                 model="claude-sonnet-4-20250514",
                 max_tokens=4096,
                 temperature=0.1,
+                timeout=90.0,  # 90s hard limit — returns error instead of hanging
                 messages=[{"role": "user", "content": batch_prompt}],
             )
             raw_text = msg.content[0].text.strip()
