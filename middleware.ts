@@ -23,12 +23,13 @@ export function middleware(request: NextRequest) {
   // Only gate /dashboard and any other private paths
   if (!pathname.startsWith("/dashboard")) return NextResponse.next();
 
-  // Supabase stores the session in a cookie named sb-<project-ref>-auth-token
-  // We look for any cookie that starts with "sb-" and contains "-auth-token"
+  // Supabase stores the session in cookies named sb-<project-ref>-auth-token
+  // Newer Supabase JS client uses chunked cookies: sb-xxx-auth-token.0, .1 etc.
+  // We use includes("-auth-token") to match both old and new formats.
   const cookies = request.cookies.getAll();
   const hasSession = cookies.some(
     (c) =>
-      (c.name.startsWith("sb-") && c.name.endsWith("-auth-token")) ||
+      (c.name.startsWith("sb-") && c.name.includes("-auth-token")) ||
       c.name === "supabase-auth-token"
   );
 
