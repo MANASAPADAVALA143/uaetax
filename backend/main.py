@@ -13,6 +13,7 @@ from routers.vat_return import router as vat_return_router
 from routers.dashboard import router as dashboard_router
 from routers import automations
 from routers import corporate_tax
+from routers import tax_memo
 from routers.auth_router import router as auth_router
 
 # Load .env only in local dev — Railway injects env vars directly
@@ -36,6 +37,7 @@ app.include_router(vat_return_router)
 app.include_router(dashboard_router)
 app.include_router(automations.router, prefix="/api/automations", tags=["automations"])
 app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"])
+app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
 
 # CORS — allow production frontend + local dev
 # Authorization and X-Company-ID must be in allow_headers for auth to work

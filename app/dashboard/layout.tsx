@@ -58,6 +58,7 @@ export default function DashboardLayout({
   ];
 
   const reportItems = [
+    { id: "tax-memo", label: "Tax Memo", icon: "🗒️", href: "/dashboard/tax-memo" },
     { id: "fta-reports", label: "FTA Reports", icon: "📈", href: "#" },
     { id: "multi-entity", label: "Multi-Entity", icon: "🏢", href: "#" },
   ];
@@ -128,16 +129,23 @@ export default function DashboardLayout({
           <div className="text-[10px] uppercase tracking-[0.12em] text-muted2 font-mono px-3 pt-2.5 pb-1.5 mt-2">
             Reports
           </div>
-          {reportItems.map((item) => (
-            <Link
-              key={item.id}
-              href={item.href}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] cursor-pointer text-[13px] font-medium text-muted transition-all select-none hover:bg-[rgba(30,70,150,0.25)] hover:text-white"
-            >
-              <span className="text-base flex-shrink-0">{item.icon}</span>
-              {item.label}
-            </Link>
-          ))}
+          {reportItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] cursor-pointer text-[13px] font-medium transition-all select-none ${
+                  isActive
+                    ? "bg-gold-pale text-gold-lt border border-border-g"
+                    : "text-muted hover:bg-[rgba(30,70,150,0.25)] hover:text-white"
+                }`}
+              >
+                <span className="text-base flex-shrink-0">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
 
           <div className="text-[10px] uppercase tracking-[0.12em] text-muted2 font-mono px-3 pt-2.5 pb-1.5 mt-2">
             Settings
