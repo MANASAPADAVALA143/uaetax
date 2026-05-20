@@ -1,13 +1,16 @@
 """Corporate Tax calculation and advisory endpoints."""
+import hashlib
+import hmac
 import json
 import os
-from datetime import date, datetime
+import secrets
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -227,3 +230,138 @@ async def suggest_addbacks(
         raise HTTPException(status_code=502, detail=f"Invalid JSON returned by Claude: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Claude suggestion failed: {exc}") from exc
+
+
+# ── n8n CT Filing inbound webhook ─────────────────────────────────────────────
+
+class CTAssessmentInbound(BaseModel):
+    company_id: int
+    tax_year: str
+    taxable_income: float
+    ct_payable: float
+    addbacks: Dict[str, Any] = Field(default_factory=dict)
+    deductions: Dict[str, Any] = Field(default_factory=dict)
+    analysis: str = ""
+    urgency_level: Optional[str] = None
+    days_to_deadline: Optional[int] = None
+    checklist_completion_pct: Optional[int] = None
+
+
+def _verify_n8n_sig(secret: str, body: bytes, received: str) -> bool:
+    if not received or not received.strip():
+        return False
+    received = received.strip()
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if hmac.compare_digest(expected, received.lower()):
+        return True
+    return secrets.compare_digest(received, secret)
+
+
+@router.post("/n8n/inbound/ct_assessed")
+async def inbound_ct_assessed(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_n8n_signature: Optional[str] = Header(default=None, alias="X-N8N-Signature"),
+):
+    """Receive CT filing prep results from n8n workflow and store in DB."""
+    secret = os.getenv("N8N_WEBHOOK_SECRET")
+    if not secret:
+        raise HTTPException(status_code=500, detail="N8N_WEBHOOK_SECRET not configured")
+    if not x_n8n_signature:
+        raise HTTPException(status_code=401, detail="Missing X-N8N-Signature")
+
+    raw_body = await request.body()
+    if not _verify_n8n_sig(secret, raw_body, x_n8n_signature):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    try:
+        payload = CTAssessmentInbound.model_validate_json(raw_body)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid payload: {exc}") from exc
+
+    # Store as a CTReturn row (reuse existing model)
+    ct_row = CTReturn(
+        company_id=payload.company_id,
+        tax_period_start=date(int(payload.tax_year[:4]), 1, 1),
+        tax_period_end=date(int(payload.tax_year[:4]), 12, 31),
+        accounting_profit=payload.taxable_income,
+        total_addbacks=sum(payload.addbacks.values()) if isinstance(payload.addbacks, dict) else 0,
+        total_deductions=sum(payload.deductions.values()) if isinstance(payload.deductions, dict) else 0,
+        taxable_income=payload.taxable_income,
+        ct_payable=payload.ct_payable,
+        ai_advisory=payload.analysis,
+        status="assessed",
+    )
+    db.add(ct_row)
+    db.commit()
+    db.refresh(ct_row)
+    return {"success": True, "assessment_id": ct_row.id, "ct_payable_aed": payload.ct_payable}
+
+
+# ── Upcoming UAE tax deadlines ─────────────────────────────────────────────────
+
+@router.get("/deadlines/upcoming")
+async def upcoming_deadlines(
+    _company_id: int = Depends(get_current_company_id),
+):
+    """Return next 3 UAE tax deadlines for the company with urgency colour."""
+    today = date.today()
+
+    def urgency(d: date) -> str:
+        days = (d - today).days
+        if days <= 30:
+            return "RED"
+        if days <= 60:
+            return "AMBER"
+        if days <= 90:
+            return "YELLOW"
+        return "GREEN"
+
+    def next_vat_deadline() -> date:
+        """28th of month after each quarter end (Mar/Jun/Sep/Dec)."""
+        quarter_end_months = [3, 6, 9, 12]
+        for m in quarter_end_months:
+            dl = date(today.year, m, 28) + timedelta(days=28)
+            # 28th of next month
+            if m == 12:
+                dl = date(today.year + 1, 1, 28)
+            else:
+                dl = date(today.year, m + 1, 28)
+            if dl >= today:
+                return dl
+        return date(today.year + 1, 1, 28)
+
+    deadlines = [
+        {
+            "tax_type": "VAT Return",
+            "deadline": next_vat_deadline().isoformat(),
+            "days_remaining": (next_vat_deadline() - today).days,
+            "urgency": urgency(next_vat_deadline()),
+            "description": "FTA VAT return — 28th of month after quarter end",
+        },
+        {
+            "tax_type": "E-Invoicing Phase 1",
+            "deadline": "2027-01-01",
+            "days_remaining": (date(2027, 1, 1) - today).days,
+            "urgency": urgency(date(2027, 1, 1)),
+            "description": "PEPPOL e-invoicing mandatory for large taxpayers",
+        },
+        {
+            "tax_type": "Corporate Tax Return",
+            "deadline": "2026-09-30",
+            "days_remaining": (date(2026, 9, 30) - today).days,
+            "urgency": urgency(date(2026, 9, 30)),
+            "description": "CT return — 9 months after FY end (Dec FY)",
+        },
+        {
+            "tax_type": "ESR Notification",
+            "deadline": "2026-06-30",
+            "days_remaining": (date(2026, 6, 30) - today).days,
+            "urgency": urgency(date(2026, 6, 30)),
+            "description": "Economic Substance Regulations notification",
+        },
+    ]
+
+    # Sort by days remaining, return top 4
+    deadlines.sort(key=lambda x: x["days_remaining"])
+    return [d for d in deadlines if d["days_remaining"] >= 0][:4]
