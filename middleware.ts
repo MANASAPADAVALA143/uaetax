@@ -33,11 +33,12 @@ export function middleware(request: NextRequest) {
       c.name === "supabase-auth-token"
   );
 
-  if (!hasSession) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
+  // Auth gate temporarily disabled for demo access
+  // if (!hasSession) {
+  //   const loginUrl = new URL("/login", request.url);
+  //   loginUrl.searchParams.set("next", pathname);
+  //   return NextResponse.redirect(loginUrl);
+  // }
 
   return NextResponse.next();
 }
