@@ -39,17 +39,19 @@ app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"
 
 # CORS — allow production frontend + local dev
 # Authorization and X-Company-ID must be in allow_headers for auth to work
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000"
-).split(",")
+_default_origins = (
+    "https://uaetax-production.up.railway.app,"
+    "http://localhost:3000,"
+    "http://127.0.0.1:3000"
+)
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["Authorization", "X-Company-ID", "Content-Type", "X-N8N-Signature", "*"],
+    allow_headers=["Authorization", "X-Company-ID", "Content-Type", "X-N8N-Signature", "Accept", "*"],
 )
 
 
