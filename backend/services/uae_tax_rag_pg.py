@@ -25,6 +25,12 @@ class UAETaxRAG:
         self._model = None
         self._sb = None
         self._ready = False
+        # Load in background thread so uvicorn starts instantly
+        import threading
+        t = threading.Thread(target=self._load_safe, daemon=True)
+        t.start()
+
+    def _load_safe(self) -> None:
         try:
             self._load()
         except Exception as exc:  # noqa: BLE001
