@@ -72,6 +72,7 @@ export default function ReviewQueuePage() {
   const [overrideTreatment, setOverrideTreatment] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [approvalBanner, setApprovalBanner] = useState<{ invoiceName: string; txCount: number } | null>(null);
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
@@ -94,13 +95,20 @@ export default function ReviewQueuePage() {
     opts?: { treatment?: string; reason?: string }
   ) => {
     setActionLoading(true);
+    setApprovalBanner(null);
     try {
-      await apiClient.post(`/api/invoice/invoices/${inv.id}/review`, {
+      const { data } = await apiClient.post(`/api/invoice/invoices/${inv.id}/review`, {
         action,
         override_treatment: opts?.treatment,
         reason: opts?.reason,
         reviewed_by: user?.email || "unknown",
       });
+      if (data?.approved && action !== "escalate") {
+        setApprovalBanner({
+          invoiceName: inv.vendor_name || inv.filename,
+          txCount: data.transactions_created ?? 0,
+        });
+      }
       await fetchInvoices();
     } catch (e) {
       console.error("Review action failed", e);
@@ -139,6 +147,36 @@ export default function ReviewQueuePage() {
           ← Upload more
         </Link>
       </div>
+
+      {/* Approval confirmation banner */}
+      {approvalBanner && (
+        <div className="mb-5 rounded-[12px] border border-green/30 bg-[rgba(45,212,160,0.08)] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-green text-lg">✓</span>
+            <div>
+              <p className="text-green text-sm font-medium">
+                Approved · {approvalBanner.txCount} transaction{approvalBanner.txCount !== 1 ? "s" : ""} added to VAT Classifier
+              </p>
+              <p className="text-[12px] text-muted2 mt-0.5">{approvalBanner.invoiceName}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard/vat-classifier"
+              className="text-[12px] text-gold-lt hover:underline font-medium"
+            >
+              View in VAT Classifier →
+            </Link>
+            <button
+              type="button"
+              onClick={() => setApprovalBanner(null)}
+              className="text-muted2 text-[18px] leading-none hover:text-white transition"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Status tabs */}
       <div className="flex gap-2 flex-wrap mb-6 border-b border-border pb-3">

@@ -868,10 +868,107 @@ def review_invoice(
     inv.reviewed_by = payload.reviewed_by
     inv.review_reason = payload.reason
     inv.reviewed_at = datetime.utcnow()
+
+    # ── Auto-create Transaction records on approval (Art. 48 single source of truth) ──
+    transactions_created = 0
+    if inv.status == "approved":
+        # Resolve invoice date
+        inv_date: date
+        if inv.invoice_date:
+            try:
+                inv_date = date.fromisoformat(str(inv.invoice_date)[:10])
+            except Exception:
+                inv_date = date.today()
+        else:
+            inv_date = date.today()
+
+        vat_treatment = inv.vat_treatment or "standard_rated"
+        line_items = inv.line_items or []
+
+        # If no line items, create one transaction from the invoice total
+        if not line_items and inv.total_aed:
+            subtotal = inv.total_aed / 1.05 if vat_treatment == "standard_rated" else inv.total_aed
+            exists = db.query(Transaction).filter(
+                and_(
+                    Transaction.company_id == company_id,
+                    Transaction.invoice_number == inv.invoice_number,
+                    Transaction.vendor_or_customer == inv.vendor_name,
+                    Transaction.amount_aed == round(subtotal, 2),
+                )
+            ).first()
+            if not exists:
+                vat_amount = round(subtotal * 0.05, 2) if vat_treatment == "standard_rated" else 0.0
+                tx = Transaction(
+                    company_id=company_id,
+                    date=inv_date,
+                    description=inv.vendor_name or f"Invoice #{inv.invoice_number}",
+                    vendor_or_customer=inv.vendor_name,
+                    invoice_number=inv.invoice_number,
+                    transaction_type="purchase",
+                    vat_treatment=vat_treatment,
+                    amount_aed=round(subtotal, 2),
+                    vat_amount_aed=vat_amount,
+                    confidence_score=round((inv.confidence or 0.9) * 100, 1),
+                    is_verified=True,
+                    ai_reasoning=f"Auto-created from approved Invoice Flow invoice #{inv.id} · {inv.filename or ''}",
+                )
+                db.add(tx)
+                transactions_created += 1
+        else:
+            for li in line_items:
+                desc = li.get("description", "").strip() or inv.vendor_name or "Invoice line item"
+                qty = float(li.get("quantity", 1) or 1)
+                unit_price = float(li.get("unit_price", 0) or 0)
+                amount = round(qty * unit_price, 2)
+                # Fallback: use total from line item dict if available
+                if amount <= 0:
+                    amount = round(float(li.get("amount", 0) or 0), 2)
+                if amount <= 0:
+                    continue
+
+                # Dedup: skip if identical line already exists
+                exists = db.query(Transaction).filter(
+                    and_(
+                        Transaction.company_id == company_id,
+                        Transaction.invoice_number == inv.invoice_number,
+                        Transaction.description == desc,
+                        Transaction.amount_aed == amount,
+                    )
+                ).first()
+                if exists:
+                    continue
+
+                vat_rate = float(li.get("vat_rate", 5) or 5)
+                vat_amount = round(amount * vat_rate / 100, 2) if vat_treatment == "standard_rated" else 0.0
+
+                tx = Transaction(
+                    company_id=company_id,
+                    date=inv_date,
+                    description=desc,
+                    vendor_or_customer=inv.vendor_name,
+                    invoice_number=inv.invoice_number,
+                    transaction_type="purchase",
+                    vat_treatment=vat_treatment,
+                    amount_aed=amount,
+                    vat_amount_aed=vat_amount,
+                    confidence_score=round((inv.confidence or 0.9) * 100, 1),
+                    is_verified=True,
+                    ai_reasoning=f"Auto-created from approved Invoice Flow invoice #{inv.id} · {inv.filename or ''}",
+                )
+                db.add(tx)
+                transactions_created += 1
+
     db.commit()
     db.refresh(inv)
 
-    return {"invoice_id": inv.id, "status": inv.status, "vat_treatment": inv.vat_treatment}
+    return {
+        "invoice_id": inv.id,
+        "status": inv.status,
+        "vat_treatment": inv.vat_treatment,
+        "approved": inv.status == "approved",
+        "transactions_created": transactions_created,
+        "zoho_ready": True,
+    }
 
 
 @router.get("/supplier-profile/{vendor_name}")
