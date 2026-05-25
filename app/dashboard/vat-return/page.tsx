@@ -83,8 +83,10 @@ function fmtAed(n: number): string {
 
 export default function VATReturnPage() {
 
-  const [quarter, setQuarter] = useState<Quarter>(1);
-  const [year, setYear] = useState(2025);
+  const currentYear = new Date().getFullYear();
+  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3) as Quarter;
+  const [quarter, setQuarter] = useState<Quarter>(currentQuarter);
+  const [year, setYear] = useState(currentYear);
   const [boxes, setBoxes] = useState<BoxState>(ZERO_BOXES);
   const [returnId, setReturnId] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);

@@ -34,6 +34,8 @@ export default function VATClassifier() {
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [activeView, setActiveView] = useState<"saved" | "new">("saved");
   const [error, setError] = useState<string | null>(null);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSaved = useCallback(async () => {
@@ -65,6 +67,7 @@ export default function VATClassifier() {
 
     setIsUploading(true);
     setError(null);
+    setUploadMsg(null);
 
     try {
       const formData = new FormData();
@@ -81,7 +84,20 @@ export default function VATClassifier() {
         }
       );
 
-      const raw = response.data.summary?.classifications || [];
+      const summary = response.data.summary || {};
+      const skipped = summary.skipped_duplicates || 0;
+      const classified = summary.classified_rows || 0;
+
+      // Build a friendly message
+      if (classified === 0 && skipped > 0) {
+        setUploadMsg(`⚠️ All ${skipped} rows already exist in the database — no new transactions added. Use "Clear All Data" if you want to re-classify.`);
+      } else {
+        const parts = [`✅ ${classified} new transaction${classified !== 1 ? "s" : ""} classified and saved.`];
+        if (skipped > 0) parts.push(`${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped.`);
+        setUploadMsg(parts.join(" "));
+      }
+
+      const raw = summary.classifications || [];
       setResults(
         raw.map((c: Record<string, unknown>) => ({
           description: String(c.description ?? ""),
@@ -105,6 +121,21 @@ export default function VATClassifier() {
       console.error("Classification error:", err);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm(`Delete ALL ${savedTxns.length} transactions? This cannot be undone.`)) return;
+    setClearing(true);
+    try {
+      await apiClient.delete("/api/vat/transactions/all");
+      await fetchSaved();
+      setResults([]);
+      setUploadMsg("✅ All transactions cleared. You can now re-upload your file.");
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Failed to clear transactions.");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -188,12 +219,31 @@ export default function VATClassifier() {
         </div>
       )}
 
+      {/* Upload message banner */}
+      {uploadMsg && (
+        <div className={`mb-4 px-4 py-3 rounded-[10px] text-sm border ${uploadMsg.startsWith("⚠️") ? "border-amber/40 bg-[rgba(255,183,0,0.08)] text-amber" : "border-green/30 bg-[rgba(45,212,160,0.08)] text-green"}`}>
+          {uploadMsg}
+        </div>
+      )}
+
       {/* Saved transactions view */}
       {activeView === "saved" && (
         <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl overflow-hidden mb-6">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <p className="text-sm font-semibold text-white">{savedTxns.length} classified transactions</p>
-            <span className="text-[10px] text-muted2 font-mono uppercase">Auto-verified · Ready for VAT Return</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-muted2 font-mono uppercase">Auto-verified · Ready for VAT Return</span>
+              {savedTxns.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                  className="px-3 py-1 rounded-[6px] text-[11px] font-medium border border-red/30 text-red hover:bg-[rgba(255,107,107,0.1)] disabled:opacity-50 transition-all"
+                >
+                  {clearing ? "Clearing…" : "🗑 Clear All Data"}
+                </button>
+              )}
+            </div>
           </div>
           {loadingSaved ? (
             <div className="text-center py-12 text-muted2">Loading transactions…</div>

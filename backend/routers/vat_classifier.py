@@ -376,7 +376,13 @@ def classify_bulk(
         if not amount_col:
             raise HTTPException(status_code=400, detail=f"No amount column found. Columns detected: {list(df.columns)}")
 
-        has_tx_type_col = "transaction_type" in df.columns
+        # Detect transaction_type column — handles both "transaction_type" (CSV)
+        # and "Transaction Type" → "transaction type" (Excel) after lowercasing
+        tx_type_col = next(
+            (col for col in df.columns if "transaction" in col and "type" in col),
+            None,
+        )
+        has_tx_type_col = tx_type_col is not None
 
         # ── Build row specs (parse before parallelising) ──────────────────────
         row_specs: List[Dict[str, Any]] = []
@@ -386,8 +392,8 @@ def classify_bulk(
                 continue
 
             row_tx_type = transaction_type
-            if has_tx_type_col and pd.notna(row.get("transaction_type", None)):
-                v = str(row["transaction_type"]).lower().strip()
+            if has_tx_type_col and tx_type_col and pd.notna(row.get(tx_type_col, None)):
+                v = str(row[tx_type_col]).lower().strip()
                 if v in ("sale", "purchase"):
                     row_tx_type = v
 
@@ -416,6 +422,43 @@ def classify_bulk(
 
         if not row_specs:
             raise HTTPException(status_code=400, detail="No classifiable rows found in file.")
+
+        # ── Deduplication: skip rows already in DB (same company + invoice_number) ─
+        existing_invoice_numbers: set = set()
+        candidate_nums = {
+            s["invoice_num"] for s in row_specs if s["invoice_num"]
+        }
+        if candidate_nums:
+            existing_rows = (
+                db.query(Transaction.invoice_number)
+                .filter(
+                    Transaction.company_id == company_id,
+                    Transaction.invoice_number.in_(candidate_nums),
+                )
+                .all()
+            )
+            existing_invoice_numbers = {r.invoice_number for r in existing_rows}
+
+        original_count = len(row_specs)
+        row_specs = [
+            s for s in row_specs
+            if not s["invoice_num"] or s["invoice_num"] not in existing_invoice_numbers
+        ]
+        skipped_count = original_count - len(row_specs)
+
+        if not row_specs:
+            return {
+                "job_id": str(uuid.uuid4()),
+                "summary": {
+                    "total_rows": original_count,
+                    "classified_rows": 0,
+                    "skipped_duplicates": skipped_count,
+                    "needs_review_count": 0,
+                    "classifications": [],
+                    "message": f"All {skipped_count} rows already exist in the database. No new transactions were added.",
+                },
+                "excel_download_url": None,
+            }
 
         # ── Classify ALL rows in ONE Claude API call (batch) ─────────────────
         if claude_client is None:
@@ -569,6 +612,7 @@ Return ONLY the JSON array. No markdown, no preamble."""
             "summary": {
                 "total_rows": len(df),
                 "classified_rows": len(classifications_out),
+                "skipped_duplicates": skipped_count,
                 "needs_review_count": needs_review_count,
                 "classifications": classifications_out,
             },
@@ -631,6 +675,32 @@ async def get_transactions(
     transactions = query.order_by(Transaction.date.desc()).all()
     
     return transactions
+
+
+@router.delete("/transactions/all")
+async def delete_all_transactions(
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete ALL classified transactions for this company.
+    Useful for clearing duplicate data from repeated test uploads.
+    """
+    deleted = (
+        db.query(Transaction)
+        .filter(Transaction.company_id == company_id)
+        .delete(synchronize_session=False)
+    )
+    db.add(
+        AuditLog(
+            company_id=company_id,
+            actor="user",
+            action="delete_all_transactions",
+            entity=f"{deleted} transactions deleted",
+        )
+    )
+    db.commit()
+    return {"deleted_count": deleted, "message": f"Deleted {deleted} transactions. You can now re-upload your file."}
 
 
 @router.patch("/transactions/{transaction_id}/verify")
