@@ -308,33 +308,51 @@ export default function ReviewQueuePage() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              {!["approved", "auto_approved", "escalated", "posted"].includes(inv.status) && (
+              {/* Action buttons — pending/review: full set; escalated: FM override only */}
+              {!["approved", "auto_approved", "posted"].includes(inv.status) && (
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => doAction(inv, "approve")}
-                    className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium bg-[rgba(45,212,160,0.12)] text-green border border-green/30 hover:opacity-90 transition disabled:opacity-40"
-                  >
-                    ✓ Approve
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => { setOverrideModal(inv); setOverrideTreatment(inv.vat_treatment || ""); }}
-                    className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium border border-border text-muted hover:border-border-g hover:text-white transition disabled:opacity-40"
-                  >
-                    ✎ Override
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => doAction(inv, "escalate", { reason: "Escalated for manual review" })}
-                    className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium bg-[rgba(255,107,107,0.1)] text-red border border-red/30 hover:opacity-90 transition disabled:opacity-40"
-                  >
-                    ⚠ Escalate
-                  </button>
+                  {inv.status === "escalated" ? (
+                    <>
+                      <div className="w-full text-[11px] text-red/80 mb-1">
+                        ⛔ Hard blocked — Finance Manager override required with documented reason
+                      </div>
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => { setOverrideModal(inv); setOverrideTreatment(inv.vat_treatment || ""); }}
+                        className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium bg-[rgba(201,168,76,0.12)] text-gold-lt border border-border-g hover:opacity-90 transition disabled:opacity-40"
+                      >
+                        🔓 Finance Manager Override
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => doAction(inv, "approve")}
+                        className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium bg-[rgba(45,212,160,0.12)] text-green border border-green/30 hover:opacity-90 transition disabled:opacity-40"
+                      >
+                        ✓ Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => { setOverrideModal(inv); setOverrideTreatment(inv.vat_treatment || ""); }}
+                        className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium border border-border text-muted hover:border-border-g hover:text-white transition disabled:opacity-40"
+                      >
+                        ✎ Override
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => doAction(inv, "escalate", { reason: "Escalated for manual review" })}
+                        className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium bg-[rgba(255,107,107,0.1)] text-red border border-red/30 hover:opacity-90 transition disabled:opacity-40"
+                      >
+                        ⚠ Escalate
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -415,7 +433,14 @@ export default function ReviewQueuePage() {
       {overrideModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-[#071228] border border-border rounded-2xl p-8 w-full max-w-md shadow-2xl space-y-5">
-            <h3 className="text-white font-semibold text-lg">Override VAT Treatment</h3>
+            <h3 className="text-white font-semibold text-lg">
+              {overrideModal.status === "escalated" ? "🔓 Finance Manager Override" : "Override VAT Treatment"}
+            </h3>
+            {overrideModal.status === "escalated" && (
+              <div className="rounded-[8px] border border-amber/30 bg-[rgba(255,183,0,0.08)] px-3 py-2 text-[12px] text-amber">
+                This invoice was hard-blocked by the risk engine. Your override will be logged for audit trail.
+              </div>
+            )}
             <p className="text-[13px] text-muted">
               Invoice: <span className="text-white">{overrideModal.vendor_name || overrideModal.filename}</span>
             </p>

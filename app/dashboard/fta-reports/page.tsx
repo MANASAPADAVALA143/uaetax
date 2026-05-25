@@ -60,6 +60,17 @@ function fmtAed(n: number) {
   return `AED ${n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function FTAReportsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("summary");
   const [periodStart, setPeriodStart] = useState(`${new Date().getFullYear()}-01-01`);
@@ -215,13 +226,35 @@ export default function FTAReportsPage() {
       {activeTab === "summary" && summary && (
         <div className="space-y-5">
           <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
               <div>
                 <p className="text-white font-bold text-lg">{summary.company_name}</p>
                 {summary.trn && <p className="text-[12px] text-muted2 font-mono">TRN: {summary.trn}</p>}
                 <p className="text-[12px] text-muted2 mt-0.5">{summary.period_start} → {summary.period_end} · {summary.transaction_count} transactions</p>
               </div>
-              <span className="text-[10px] font-mono text-muted2 border border-border px-2 py-1 rounded">FTA VAT Return</span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => downloadCsv(`fta_vat_summary_${periodStart}_${periodEnd}.csv`, [
+                    ["Company", "TRN", "Period Start", "Period End", "Transactions"],
+                    [summary.company_name, summary.trn ?? "", summary.period_start, summary.period_end, String(summary.transaction_count)],
+                    [],
+                    ["Box", "Description", "Amount AED"],
+                    ["Box 1", "Standard Rated Sales", String(summary.vat_boxes.box1_standard_rated_sales)],
+                    ["Box 2", "Output VAT Due", String(summary.vat_boxes.box2_output_vat)],
+                    ["Box 3", "Zero Rated Sales", String(summary.vat_boxes.box3_zero_rated_sales)],
+                    ["Box 4", "Exempt Sales", String(summary.vat_boxes.box4_exempt_sales)],
+                    ["Box 5", "Total Taxable Supplies", String(summary.vat_boxes.box5_total_taxable_supplies)],
+                    ["Box 6", "Taxable Expenses", String(summary.vat_boxes.box6_taxable_expenses)],
+                    ["Box 7", "Input VAT Recoverable", String(summary.vat_boxes.box7_input_vat_recoverable)],
+                    ["Box 8", "Net VAT Payable", String(summary.vat_boxes.box8_net_vat_payable)],
+                  ])}
+                  className="px-3 py-1.5 rounded-[8px] text-[11px] font-medium border border-border-g text-gold-lt bg-gold-pale hover:opacity-90 transition"
+                >
+                  📥 Export CSV
+                </button>
+                <span className="text-[10px] font-mono text-muted2 border border-border px-2 py-1 rounded">FTA VAT Return</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -269,7 +302,23 @@ export default function FTAReportsPage() {
         <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <p className="text-sm font-semibold text-white">{transactions.length} transactions</p>
-            <span className="text-[10px] text-muted2 font-mono uppercase">Tax Audit File (TAF)</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => downloadCsv(`fta_transaction_listing_${periodStart}_${periodEnd}.csv`, [
+                  ["Date", "Description", "Vendor/Customer", "Invoice #", "Type", "VAT Treatment", "Amount AED", "VAT AED", "Total AED"],
+                  ...transactions.map(t => [
+                    t.date, t.description, t.vendor_customer || "", t.invoice_number || "",
+                    t.type, t.vat_treatment,
+                    String(t.amount_aed), String(t.vat_amount_aed), String(t.total_aed),
+                  ]),
+                ])}
+                className="px-3 py-1.5 rounded-[8px] text-[11px] font-medium border border-border-g text-gold-lt bg-gold-pale hover:opacity-90 transition"
+              >
+                📥 Export CSV (TAF)
+              </button>
+              <span className="text-[10px] text-muted2 font-mono uppercase">Tax Audit File (TAF)</span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
@@ -311,6 +360,28 @@ export default function FTAReportsPage() {
       {/* ── AP RISK REPORT ── */}
       {activeTab === "ap-risk" && apRisk && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => downloadCsv(`fta_ap_risk_summary.csv`, [
+                ["Metric", "Value"],
+                ["Total Invoices", String(apRisk.total_invoices)],
+                ["Total VAT at Risk (AED)", String(apRisk.total_vat_at_risk_aed)],
+                ["Blocked Input VAT (AED)", String(apRisk.blocked_input_vat_aed)],
+                ["HIGH Flags", String(apRisk.flag_counts.high)],
+                ["MEDIUM Flags", String(apRisk.flag_counts.medium)],
+                ["LOW Flags", String(apRisk.flag_counts.low)],
+                ["Missing/Invalid TRN", String(apRisk.anomaly_counts.missing_or_invalid_trn)],
+                ["Duplicate Invoices", String(apRisk.anomaly_counts.duplicate_invoices)],
+                [],
+                ["Status", "Count"],
+                ...Object.entries(apRisk.status_breakdown).map(([s, c]) => [s, String(c)]),
+              ])}
+              className="px-3 py-1.5 rounded-[8px] text-[11px] font-medium border border-border-g text-gold-lt bg-gold-pale hover:opacity-90 transition"
+            >
+              📥 Export CSV
+            </button>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: "Total Invoices", value: apRisk.total_invoices, color: "text-white" },
