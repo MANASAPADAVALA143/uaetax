@@ -44,7 +44,9 @@ app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
 _default_origins = (
     "https://uaetax-production.up.railway.app,"
     "http://localhost:3000,"
-    "http://127.0.0.1:3000"
+    "http://localhost:3001,"
+    "http://127.0.0.1:3000,"
+    "http://127.0.0.1:3001"
 )
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
 
