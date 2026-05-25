@@ -86,7 +86,41 @@ export default function CorporateTaxPage() {
   const [narrative, setNarrative] = useState<string | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState(false);
   const [narrativeError, setNarrativeError] = useState<string | null>(null);
+  const [autoFillLoading, setAutoFillLoading] = useState(false);
+  const [autoFillMsg, setAutoFillMsg] = useState<string | null>(null);
   const countdown = useCountdown(FILING_DEADLINE);
+
+  const handleAutoFill = async () => {
+    setAutoFillLoading(true);
+    setAutoFillMsg(null);
+    try {
+      // Default to current FY: Jan 1 – Dec 31 of current year
+      const year = new Date().getFullYear();
+      const { data } = await apiClient.get(
+        `/api/ct/from-transactions?period_start=${year}-01-01&period_end=${year}-12-31`
+      );
+      if (data.transaction_count === 0) {
+        setAutoFillMsg("No transactions found for this year. Upload data in VAT Classifier first.");
+        return;
+      }
+      setRevenue(String(data.revenue_aed));
+      setExpenses(String(data.expenses_aed));
+      // Add suggested addbacks
+      if (data.suggested_addbacks?.length > 0) {
+        const newAddbacks = data.suggested_addbacks.map((a: { label: string; amount: number }) => ({
+          id: crypto.randomUUID(),
+          label: a.label,
+          amount: String(a.amount),
+        }));
+        setAddbacks(newAddbacks);
+      }
+      setAutoFillMsg(`Auto-filled from ${data.transaction_count} transactions (${data.period_start} → ${data.period_end})`);
+    } catch {
+      setAutoFillMsg("Could not load transaction data. Make sure you have uploaded data via VAT Classifier.");
+    } finally {
+      setAutoFillLoading(false);
+    }
+  };
 
   const totals = useMemo(() => {
     const rev = parseAmount(revenue);
@@ -239,6 +273,28 @@ export default function CorporateTaxPage() {
 
       {tab === 0 && (
         <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-8 space-y-8">
+
+          {/* Auto-fill banner */}
+          <div className="flex items-center justify-between gap-4 rounded-[12px] border border-border-g bg-gold-pale px-5 py-3.5">
+            <div>
+              <p className="text-[13px] font-semibold text-gold-lt">Auto-fill from VAT Classifier Data</p>
+              <p className="text-[11px] text-muted mt-0.5">Pulls revenue, expenses &amp; addback suggestions from your uploaded transactions</p>
+              {autoFillMsg && (
+                <p className={`text-[11px] mt-1 ${autoFillMsg.includes("No transactions") || autoFillMsg.includes("Could not") ? "text-amber" : "text-green"}`}>
+                  {autoFillMsg}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleAutoFill}
+              disabled={autoFillLoading}
+              className="flex-shrink-0 px-4 py-2 rounded-[8px] text-[12px] font-semibold bg-gradient-to-br from-gold to-gold-lt text-deep disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {autoFillLoading ? "Loading…" : "⚡ Auto-fill"}
+            </button>
+          </div>
+
           <section className="grid gap-6 md:grid-cols-2">
             <div>
               <label className="block text-[12px] text-muted2 uppercase tracking-wide mb-2">

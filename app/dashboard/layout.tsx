@@ -74,7 +74,7 @@ export default function DashboardLayout({
 
   const reportItems = [
     { id: "tax-memo", label: "Tax Memo", icon: "🗒️", href: "/dashboard/tax-memo" },
-    { id: "fta-reports", label: "FTA Reports", icon: "📈", href: "#" },
+    { id: "fta-reports", label: "FTA Reports", icon: "📈", href: "/dashboard/fta-reports" },
     { id: "multi-entity", label: "Multi-Entity", icon: "🏢", href: "#" },
   ];
 

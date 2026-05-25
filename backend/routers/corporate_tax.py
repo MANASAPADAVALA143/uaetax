@@ -14,9 +14,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from sqlalchemy import and_, func as sa_func
 from database import get_db
 from middleware.auth import get_current_company_id
-from models import CTReturn
+from models import CTReturn, Transaction
 
 load_dotenv()
 
@@ -164,6 +165,66 @@ async def list_ct_returns(
         }
         for row in rows
     ]
+
+
+@router.get("/from-transactions")
+async def ct_from_transactions(
+    period_start: date = Query(...),
+    period_end: date = Query(...),
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Auto-compute accounting profit from VAT Classifier transaction data."""
+    txns = db.query(Transaction).filter(
+        and_(
+            Transaction.company_id == company_id,
+            Transaction.date >= period_start,
+            Transaction.date <= period_end,
+        )
+    ).all()
+
+    revenue = sum(t.amount_aed for t in txns if t.transaction_type == "sale")
+    expenses = sum(t.amount_aed for t in txns if t.transaction_type == "purchase")
+    accounting_profit = revenue - expenses
+
+    # Breakdown by VAT treatment for addback suggestions
+    exempt_expenses = sum(
+        t.amount_aed for t in txns
+        if t.transaction_type == "purchase" and t.vat_treatment in ("exempt", "out_of_scope")
+    )
+    entertainment_est = sum(
+        t.amount_aed for t in txns
+        if t.transaction_type == "purchase"
+        and any(kw in (t.description or "").lower() for kw in [
+            "entertainment", "restaurant", "hotel", "meals", "hospitality",
+            "leisure", "recreation", "food", "beverage", "nobu", "hilton"
+        ])
+    )
+
+    suggested_addbacks = []
+    if entertainment_est > 0:
+        suggested_addbacks.append({
+            "label": "Entertainment & hospitality (non-deductible)",
+            "amount": round(entertainment_est, 2),
+            "reason": "Article 33, UAE CT Law — entertainment expenses disallowed"
+        })
+
+    return {
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "transaction_count": len(txns),
+        "revenue_aed": round(revenue, 2),
+        "expenses_aed": round(expenses, 2),
+        "accounting_profit_aed": round(accounting_profit, 2),
+        "suggested_addbacks": suggested_addbacks,
+        "breakdown": {
+            "sales_standard_rated": round(sum(t.amount_aed for t in txns if t.transaction_type == "sale" and t.vat_treatment == "standard_rated"), 2),
+            "sales_zero_rated": round(sum(t.amount_aed for t in txns if t.transaction_type == "sale" and t.vat_treatment == "zero_rated"), 2),
+            "sales_exempt": round(sum(t.amount_aed for t in txns if t.transaction_type == "sale" and t.vat_treatment == "exempt"), 2),
+            "purchases_total": round(expenses, 2),
+            "purchases_entertainment": round(entertainment_est, 2),
+        },
+    }
 
 
 @router.get("/returns/{return_id}")
