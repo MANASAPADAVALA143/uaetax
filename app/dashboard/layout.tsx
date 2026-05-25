@@ -17,10 +17,14 @@ export default function DashboardLayout({
   const { companies, loading } = useAuth();
   const [activeNav, setActiveNav] = useState("overview");
 
-  // Redirect to setup if logged in but no company exists
+  // Redirect to setup only if loading finished AND no companies found after a short delay
   useEffect(() => {
-    if (!loading && companies.length === 0) {
-      router.push("/setup-company");
+    if (loading) return;
+    if (companies.length === 0) {
+      const timer = setTimeout(() => {
+        if (companies.length === 0) router.push("/setup-company");
+      }, 2000); // 2s grace period for API
+      return () => clearTimeout(timer);
     }
   }, [loading, companies, router]);
 

@@ -7,9 +7,15 @@ import Link from "next/link";
 type Stage = "idle" | "uploading" | "extracting" | "classifying" | "done" | "error";
 
 interface RiskFlag {
+  flag_id: number;
   flag: string;
-  severity: "high" | "medium" | "low";
-  message: string;
+  category: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  title: string;
+  what_is_wrong: string;
+  action_required: string;
+  uae_law_reference: string;
+  vat_at_risk_aed: number;
 }
 
 interface ProcessedInvoice {
@@ -25,9 +31,14 @@ interface ProcessedInvoice {
   confidence?: number;
   risk_flags: RiskFlag[];
   overall_risk: string;
+  risk_score?: number;
+  recommendation?: string;
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
+  HIGH: "bg-[rgba(255,107,107,0.15)] text-red border-red/30",
+  MEDIUM: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
+  LOW: "bg-[rgba(78,168,255,0.1)] text-blue-300 border-blue-400/30",
   high: "bg-[rgba(255,107,107,0.15)] text-red border-red/30",
   medium: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
   low: "bg-[rgba(78,168,255,0.1)] text-blue-300 border-blue-400/30",
@@ -109,6 +120,8 @@ export default function InvoiceFlowPage() {
           confidence: vat_result.confidence,
           risk_flags: risk_flags || [],
           overall_risk,
+          risk_score: riskRes.data.risk_score,
+          recommendation: riskRes.data.recommendation,
         });
       } catch (e: unknown) {
         const msg =
@@ -265,13 +278,48 @@ export default function InvoiceFlowPage() {
                 <div><span className="text-muted2 block">AI Confidence</span><span className="text-white">{inv.confidence ? `${(inv.confidence * 100).toFixed(0)}%` : "—"}</span></div>
               </div>
 
+              {/* Risk score bar */}
+              {inv.risk_score !== undefined && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted2 uppercase tracking-wide">Risk Score</span>
+                    <span className={`font-mono font-bold ${inv.risk_score >= 60 ? "text-red" : inv.risk_score >= 30 ? "text-amber" : "text-green"}`}>
+                      {inv.risk_score}/100 — {inv.overall_risk}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${inv.risk_score >= 60 ? "bg-red" : inv.risk_score >= 30 ? "bg-amber" : "bg-green"}`}
+                      style={{ width: `${inv.risk_score}%` }}
+                    />
+                  </div>
+                  {inv.recommendation && (
+                    <p className="text-[11px] text-muted2 italic">{inv.recommendation}</p>
+                  )}
+                </div>
+              )}
+
               {inv.risk_flags.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-[11px] text-muted2 uppercase tracking-wide">Risk flags</p>
+                <div className="space-y-2">
+                  <p className="text-[11px] text-muted2 uppercase tracking-wide">{inv.risk_flags.length} Anomaly Flag{inv.risk_flags.length > 1 ? "s" : ""} Detected</p>
                   {inv.risk_flags.map((rf, j) => (
-                    <div key={j} className={`flex items-start gap-2 rounded-[8px] border px-3 py-2 text-[12px] ${SEVERITY_COLORS[rf.severity]}`}>
-                      <span className="font-mono uppercase text-[10px] mt-0.5 flex-shrink-0">{rf.severity}</span>
-                      <span>{rf.message}</span>
+                    <div key={j} className={`rounded-[10px] border px-4 py-3 space-y-1.5 ${SEVERITY_COLORS[rf.severity]}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] uppercase font-bold flex-shrink-0 opacity-80">{rf.severity}</span>
+                        <span className="text-[13px] font-semibold">{rf.title || rf.flag}</span>
+                        {rf.vat_at_risk_aed > 0 && (
+                          <span className="ml-auto text-[11px] font-mono opacity-80 flex-shrink-0">
+                            AED {rf.vat_at_risk_aed.toLocaleString("en-AE")} at risk
+                          </span>
+                        )}
+                      </div>
+                      {rf.what_is_wrong && <p className="text-[12px] opacity-90">{rf.what_is_wrong}</p>}
+                      {rf.action_required && (
+                        <p className="text-[11px] opacity-75">→ {rf.action_required}</p>
+                      )}
+                      {rf.uae_law_reference && (
+                        <p className="text-[10px] font-mono opacity-60">📋 {rf.uae_law_reference}</p>
+                      )}
                     </div>
                   ))}
                 </div>
