@@ -1075,6 +1075,83 @@ def review_invoice(
     }
 
 
+@router.get("/vendors")
+def list_vendors(
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Return all unique vendors with aggregate stats and risk level."""
+    invoices = db.query(Invoice).filter(Invoice.company_id == company_id).all()
+
+    # Group by vendor_name
+    vendor_map: dict = {}
+    for inv in invoices:
+        name = inv.vendor_name or "(unknown)"
+        if name not in vendor_map:
+            vendor_map[name] = {
+                "vendor_name": name,
+                "invoice_count": 0,
+                "total_spend_aed": 0.0,
+                "amounts": [],
+                "statuses": [],
+                "vat_treatments": [],
+                "last_invoice_date": None,
+                "highest_risk": "clear",
+                "escalated_count": 0,
+                "pending_review_count": 0,
+                "auto_approved_count": 0,
+                "total_vat_at_risk_aed": 0.0,
+            }
+        v = vendor_map[name]
+        v["invoice_count"] += 1
+        if inv.total_aed:
+            v["total_spend_aed"] += inv.total_aed
+            v["amounts"].append(inv.total_aed)
+        if inv.vat_treatment:
+            v["vat_treatments"].append(inv.vat_treatment)
+        if inv.invoice_date:
+            d = str(inv.invoice_date)[:10]
+            if v["last_invoice_date"] is None or d > v["last_invoice_date"]:
+                v["last_invoice_date"] = d
+        if inv.status == "escalated":
+            v["escalated_count"] += 1
+        elif inv.status == "review":
+            v["pending_review_count"] += 1
+        elif inv.status == "auto_approved":
+            v["auto_approved_count"] += 1
+        v["statuses"].append(inv.status)
+        for flag in (inv.risk_flags or []):
+            sev = (flag.get("severity") or "").upper()
+            if sev == "HIGH":
+                v["highest_risk"] = "escalate"
+            elif sev == "MEDIUM" and v["highest_risk"] == "clear":
+                v["highest_risk"] = "review"
+            v["total_vat_at_risk_aed"] += flag.get("vat_at_risk_aed", 0) or 0
+
+    result = []
+    for v in vendor_map.values():
+        amounts = v["amounts"]
+        treatments = v["vat_treatments"]
+        result.append({
+            "vendor_name": v["vendor_name"],
+            "invoice_count": v["invoice_count"],
+            "total_spend_aed": round(v["total_spend_aed"], 2),
+            "avg_invoice_aed": round(sum(amounts) / len(amounts), 2) if amounts else 0,
+            "max_invoice_aed": max(amounts) if amounts else 0,
+            "typical_vat_treatment": max(set(treatments), key=treatments.count) if treatments else None,
+            "last_invoice_date": v["last_invoice_date"],
+            "highest_risk": v["highest_risk"],
+            "escalated_count": v["escalated_count"],
+            "pending_review_count": v["pending_review_count"],
+            "auto_approved_count": v["auto_approved_count"],
+            "total_vat_at_risk_aed": round(v["total_vat_at_risk_aed"], 2),
+        })
+
+    # Sort: escalated first, then by total spend desc
+    result.sort(key=lambda x: (-x["escalated_count"], -x["pending_review_count"], -x["total_spend_aed"]))
+    return result
+
+
 @router.get("/supplier-profile/{vendor_name}")
 def supplier_profile(
     vendor_name: str,
