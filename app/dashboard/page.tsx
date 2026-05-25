@@ -38,6 +38,13 @@ interface DashboardSummary {
   }>;
   pending_approvals: number;
   open_reconciliation_mismatches: number;
+  invoice_flow: {
+    pending_review: number;
+    escalated: number;
+    auto_approved_today: number;
+    total_invoices: number;
+    total_vat_at_risk_aed: number;
+  };
 }
 
 type LoadState = "loading" | "ok" | "error";
@@ -168,18 +175,36 @@ export default function DashboardOverview() {
       changeColor: "" as const,
     },
     {
-      label: "Recon mismatches",
-      icon: "🔍",
+      label: "AP invoices in queue",
+      icon: "📄",
       val:
-        loadState === "loading" ? null : loadState === "error" ? "—" : dashStr(mismatches),
-      valClass: loadState === "ok" && mismatches !== null && mismatches > 0 ? "red" : "",
+        loadState === "loading"
+          ? null
+          : loadState === "error"
+            ? "—"
+            : dashStr(s?.invoice_flow ? s.invoice_flow.pending_review + s.invoice_flow.escalated : 0),
+      valClass:
+        loadState === "ok" && s?.invoice_flow && s.invoice_flow.escalated > 0
+          ? "red"
+          : loadState === "ok" && s?.invoice_flow && s.invoice_flow.pending_review > 0
+            ? "amber"
+            : "",
       change:
         loadState === "loading"
           ? ""
           : loadState === "error"
             ? "—"
-            : "Open mismatch records",
-      changeClass: loadState === "ok" && mismatches !== null && mismatches > 0 ? "down" : "up",
+            : s?.invoice_flow && s.invoice_flow.escalated > 0
+              ? `${s.invoice_flow.escalated} hard blocked`
+              : s?.invoice_flow && s.invoice_flow.pending_review > 0
+                ? `${s.invoice_flow.pending_review} awaiting review`
+                : "All clear",
+      changeClass:
+        loadState === "ok" && s?.invoice_flow && s.invoice_flow.escalated > 0
+          ? "down"
+          : loadState === "ok" && s?.invoice_flow && s.invoice_flow.pending_review > 0
+            ? "amber"
+            : "up",
       changeColor: "" as const,
     },
     {
@@ -272,9 +297,11 @@ export default function DashboardOverview() {
                           ? "text-gold-lt"
                           : kpi.valClass === "red"
                             ? "text-red"
-                            : kpi.valClass === "green"
-                              ? "text-green"
-                              : "text-white"
+                            : kpi.valClass === "amber"
+                              ? "text-amber"
+                              : kpi.valClass === "green"
+                                ? "text-green"
+                                : "text-white"
                   }`}
                 >
                   {kpi.val === null ? "\u00a0" : kpi.val}
@@ -285,9 +312,11 @@ export default function DashboardOverview() {
                       ? "text-green"
                       : kpi.changeClass === "down"
                         ? "text-red"
-                        : kpi.changeColor === "amber"
+                        : kpi.changeClass === "amber"
                           ? "text-amber"
-                          : "text-muted"
+                          : kpi.changeColor === "amber"
+                            ? "text-amber"
+                            : "text-muted"
                   }`}
                 >
                   {kpi.change || "\u00a0"}
@@ -295,6 +324,92 @@ export default function DashboardOverview() {
               </div>
             ))}
       </div>
+
+      {/* Action Required panel — only shown when there's something to act on */}
+      {loadState === "ok" && s?.invoice_flow && (s.invoice_flow.escalated > 0 || s.invoice_flow.pending_review > 0 || s.invoice_flow.auto_approved_today > 0) && (
+        <div className="mb-5 rounded-2xl border border-border bg-gradient-to-br from-card to-[#071228] overflow-hidden">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚡</span>
+              <span className="text-sm font-semibold text-white">Action Required</span>
+            </div>
+            <Link
+              href="/dashboard/invoice-flow/review"
+              className="text-[11px] text-gold-lt hover:underline font-medium"
+            >
+              Open Review Queue →
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border">
+            {/* Hard blocked */}
+            <div className={`px-6 py-5 flex items-start gap-4 ${s.invoice_flow.escalated > 0 ? "" : "opacity-40"}`}>
+              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm ${s.invoice_flow.escalated > 0 ? "bg-[rgba(255,107,107,0.15)]" : "bg-[rgba(255,255,255,0.06)]"}`}>
+                🔴
+              </div>
+              <div>
+                <div className={`text-[22px] font-black font-mono leading-none mb-1 ${s.invoice_flow.escalated > 0 ? "text-red" : "text-muted2"}`}>
+                  {s.invoice_flow.escalated}
+                </div>
+                <div className="text-[12px] font-medium text-white">Hard blocked</div>
+                <div className="text-[11px] text-muted2 mt-0.5">Finance Manager override required</div>
+                {s.invoice_flow.escalated > 0 && (
+                  <Link href="/dashboard/invoice-flow/review?status=escalated" className="text-[11px] text-red hover:underline mt-1 inline-block">
+                    Review now →
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* Pending review */}
+            <div className={`px-6 py-5 flex items-start gap-4 ${s.invoice_flow.pending_review > 0 ? "" : "opacity-40"}`}>
+              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm ${s.invoice_flow.pending_review > 0 ? "bg-[rgba(255,183,0,0.15)]" : "bg-[rgba(255,255,255,0.06)]"}`}>
+                🟡
+              </div>
+              <div>
+                <div className={`text-[22px] font-black font-mono leading-none mb-1 ${s.invoice_flow.pending_review > 0 ? "text-amber" : "text-muted2"}`}>
+                  {s.invoice_flow.pending_review}
+                </div>
+                <div className="text-[12px] font-medium text-white">Awaiting review</div>
+                <div className="text-[11px] text-muted2 mt-0.5">AP accountant approval needed</div>
+                {s.invoice_flow.pending_review > 0 && (
+                  <Link href="/dashboard/invoice-flow/review?status=review" className="text-[11px] text-amber hover:underline mt-1 inline-block">
+                    Review queue →
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* Auto-approved today */}
+            <div className="px-6 py-5 flex items-start gap-4">
+              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm ${s.invoice_flow.auto_approved_today > 0 ? "bg-[rgba(45,212,160,0.15)]" : "bg-[rgba(255,255,255,0.06)]"}`}>
+                🟢
+              </div>
+              <div>
+                <div className={`text-[22px] font-black font-mono leading-none mb-1 ${s.invoice_flow.auto_approved_today > 0 ? "text-green" : "text-muted2"}`}>
+                  {s.invoice_flow.auto_approved_today}
+                </div>
+                <div className="text-[12px] font-medium text-white">Auto-approved today</div>
+                <div className="text-[11px] text-muted2 mt-0.5">Clean invoices · in VAT Return</div>
+                {s.invoice_flow.auto_approved_today > 0 && (
+                  <Link href="/dashboard/vat-classifier" className="text-[11px] text-green hover:underline mt-1 inline-block">
+                    View in classifier →
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* VAT at risk bar */}
+          {s.invoice_flow.total_vat_at_risk_aed > 0 && (
+            <div className="px-6 py-3 border-t border-border flex items-center justify-between">
+              <span className="text-[11px] text-muted2">HIGH-severity VAT at risk across all invoices</span>
+              <span className="text-[12px] font-mono font-semibold text-red">
+                AED {s.invoice_flow.total_vat_at_risk_aed.toLocaleString("en-AE", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 mb-5">
         <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl overflow-hidden min-h-[320px]">
@@ -392,8 +507,12 @@ export default function DashboardOverview() {
                     value={loadState === "ok" ? dashStr(classified) : "—"}
                   />
                   <MetricRow
-                    label="Pending approvals"
-                    value={loadState === "ok" ? dashStr(s?.pending_approvals ?? null) : "—"}
+                    label="Invoices in review queue"
+                    value={loadState === "ok" ? dashStr(s?.invoice_flow?.pending_review ?? 0) : "—"}
+                  />
+                  <MetricRow
+                    label="Hard-blocked invoices"
+                    value={loadState === "ok" ? dashStr(s?.invoice_flow?.escalated ?? 0) : "—"}
                   />
                   <MetricRow
                     label="E-invoicing readiness"

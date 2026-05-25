@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from middleware.auth import get_current_company_id
-from models import AuditLog, Company, ReconciliationResult, Transaction
+from models import AuditLog, Company, Invoice, ReconciliationResult, Transaction
 from routers.vat_return import calculate_vat_return_boxes
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -162,6 +162,27 @@ async def dashboard_summary(
         or 0
     )
 
+    # ── Invoice Flow queue stats ───────────────────────────────────────────────
+    all_invoices = (
+        db.query(Invoice)
+        .filter(Invoice.company_id == company_id)
+        .all()
+    )
+    inv_pending_review = sum(1 for i in all_invoices if i.status == "review")
+    inv_escalated      = sum(1 for i in all_invoices if i.status == "escalated")
+    inv_auto_approved_today = sum(
+        1 for i in all_invoices
+        if i.status == "auto_approved"
+        and i.created_at
+        and i.created_at.date() == today
+    )
+    inv_total_vat_at_risk = sum(
+        flag.get("vat_at_risk_aed", 0)
+        for i in all_invoices
+        for flag in (i.risk_flags or [])
+        if (flag.get("severity") or "").upper() == "HIGH"
+    )
+
     ct_status = "not_started"
 
     return {
@@ -192,6 +213,13 @@ async def dashboard_summary(
         "recent_activity": recent_activity,
         "pending_approvals": int(pending_approvals),
         "open_reconciliation_mismatches": int(open_mismatches),
+        "invoice_flow": {
+            "pending_review": inv_pending_review,
+            "escalated": inv_escalated,
+            "auto_approved_today": inv_auto_approved_today,
+            "total_invoices": len(all_invoices),
+            "total_vat_at_risk_aed": round(inv_total_vat_at_risk, 2),
+        },
     }
 
 
