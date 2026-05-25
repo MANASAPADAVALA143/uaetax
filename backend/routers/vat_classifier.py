@@ -75,6 +75,8 @@ class TransactionResponse(BaseModel):
     ai_reasoning: Optional[str]
     is_verified: bool
     verification_history: Optional[List[Dict[str, Any]]] = None
+    source: Optional[str] = "vat_classifier"
+    source_invoice_id: Optional[int] = None
     created_at: datetime
 
 
@@ -543,6 +545,7 @@ Return ONLY the JSON array. No markdown, no preamble."""
                 confidence_score=classification["confidence_score"] * 100,
                 ai_reasoning=classification["reasoning"],
                 is_verified=True,  # Auto-verify bulk uploads — Claude classified at 85-95% confidence
+                source="vat_classifier",
             )
             db_transactions.append(db_transaction)
 

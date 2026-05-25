@@ -24,7 +24,18 @@ interface SavedTransaction {
   vat_amount_aed: number;
   confidence_score?: number;
   is_verified: boolean;
+  source?: string;         // "vat_classifier" | "invoice_flow_auto" | "invoice_flow_reviewed"
+  source_invoice_id?: number | null;
 }
+
+type SourceFilter = "all" | "vat_classifier" | "invoice_flow_auto" | "invoice_flow_reviewed";
+
+const SOURCE_PILLS: { key: SourceFilter; label: string }[] = [
+  { key: "all",                    label: "All" },
+  { key: "vat_classifier",         label: "From CSV" },
+  { key: "invoice_flow_auto",      label: "📄 Invoice · Auto" },
+  { key: "invoice_flow_reviewed",  label: "📄 Invoice · Reviewed" },
+];
 
 export default function VATClassifier() {
   const [file, setFile] = useState<File | null>(null);
@@ -36,6 +47,7 @@ export default function VATClassifier() {
   const [error, setError] = useState<string | null>(null);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSaved = useCallback(async () => {
@@ -171,6 +183,19 @@ export default function VATClassifier() {
   const totalPurchases = savedTxns.filter(t => t.transaction_type === "purchase").reduce((s, t) => s + t.amount_aed, 0);
   const totalVAT = savedTxns.reduce((s, t) => s + (t.vat_amount_aed || 0), 0);
 
+  // Source-filtered view
+  const filteredTxns = sourceFilter === "all"
+    ? savedTxns
+    : savedTxns.filter(t => (t.source || "vat_classifier") === sourceFilter);
+
+  // Source counts for pill badges
+  const sourceCounts: Record<SourceFilter, number> = {
+    all: savedTxns.length,
+    vat_classifier: savedTxns.filter(t => (t.source || "vat_classifier") === "vat_classifier").length,
+    invoice_flow_auto: savedTxns.filter(t => t.source === "invoice_flow_auto").length,
+    invoice_flow_reviewed: savedTxns.filter(t => t.source === "invoice_flow_reviewed").length,
+  };
+
   return (
     <>
       <div className="flex items-center justify-between mb-7">
@@ -228,9 +253,27 @@ export default function VATClassifier() {
 
       {/* Saved transactions view */}
       {activeView === "saved" && (
-        <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-            <p className="text-sm font-semibold text-white">{savedTxns.length} classified transactions</p>
+        <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl overflow-hidden mb-6" id="vat-classifier-table">
+          <div className="px-6 py-4 border-b border-border flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {SOURCE_PILLS.map(pill => (
+                <button
+                  key={pill.key}
+                  type="button"
+                  onClick={() => setSourceFilter(pill.key)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-all ${
+                    sourceFilter === pill.key
+                      ? "bg-gold-pale text-gold-lt border-border-g"
+                      : "text-muted2 border-border hover:border-border-g hover:text-white"
+                  }`}
+                >
+                  {pill.label}
+                  {sourceCounts[pill.key] > 0 && (
+                    <span className="ml-1.5 opacity-60">{sourceCounts[pill.key]}</span>
+                  )}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-[10px] text-muted2 font-mono uppercase">Auto-verified · Ready for VAT Return</span>
               {savedTxns.length > 0 && (
@@ -247,11 +290,16 @@ export default function VATClassifier() {
           </div>
           {loadingSaved ? (
             <div className="text-center py-12 text-muted2">Loading transactions…</div>
-          ) : savedTxns.length === 0 ? (
+          ) : filteredTxns.length === 0 ? (
             <div className="text-center py-16 text-muted2">
               <div className="text-4xl mb-3">📂</div>
-              <p>No transactions yet — upload your first file</p>
-              <button type="button" onClick={() => setActiveView("new")} className="mt-2 text-gold-lt text-sm hover:underline">Upload CSV/Excel →</button>
+              {savedTxns.length === 0
+                ? <p>No transactions yet — upload your first file</p>
+                : <p>No transactions match this filter</p>
+              }
+              {savedTxns.length === 0 && (
+                <button type="button" onClick={() => setActiveView("new")} className="mt-2 text-gold-lt text-sm hover:underline">Upload CSV/Excel →</button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -264,10 +312,22 @@ export default function VATClassifier() {
                   </tr>
                 </thead>
                 <tbody>
-                  {savedTxns.map((t, i) => (
+                  {filteredTxns.map((t, i) => (
                     <tr key={t.id} className={`border-b border-border/50 ${i % 2 === 0 ? "" : "bg-[rgba(255,255,255,0.02)]"}`}>
                       <td className="px-4 py-2.5 text-muted font-mono whitespace-nowrap">{t.date}</td>
-                      <td className="px-4 py-2.5 text-white max-w-[220px] truncate">{t.description}</td>
+                      <td className="px-4 py-2.5 text-white max-w-[220px]">
+                        <div className="flex items-center gap-1.5 truncate">
+                          {t.source && t.source !== "vat_classifier" && (
+                            <span
+                              title={t.source === "invoice_flow_auto" ? "Auto-approved from Invoice Flow (risk < 30)" : "Approved by reviewer from Invoice Flow"}
+                              className="flex-shrink-0 text-[9px] font-mono px-1 py-0.5 rounded bg-[rgba(200,100,255,0.12)] text-purple-300 border border-purple-400/20"
+                            >
+                              📄 {t.source === "invoice_flow_auto" ? "Auto" : "Reviewed"}
+                            </span>
+                          )}
+                          <span className="truncate">{t.description}</span>
+                        </div>
+                      </td>
                       <td className="px-4 py-2.5 text-muted truncate max-w-[140px]">{t.vendor_or_customer || "—"}</td>
                       <td className="px-4 py-2.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase ${t.transaction_type === "sale" ? "text-green bg-[rgba(45,212,160,0.12)]" : "text-amber bg-[rgba(255,183,0,0.1)]"}`}>

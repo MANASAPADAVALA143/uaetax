@@ -27,6 +27,26 @@ if _env_file.exists():
 if "sqlite" in os.getenv("DATABASE_URL", "sqlite"):
     Base.metadata.create_all(bind=engine)
 
+# ── Lightweight column migrations (idempotent — safe to run on every deploy) ──
+# Adds source + source_invoice_id to transactions table if not already present.
+def _run_column_migrations():
+    _migrations = [
+        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'vat_classifier'",
+        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL",
+    ]
+    try:
+        with engine.connect() as conn:
+            for sql in _migrations:
+                try:
+                    conn.execute(text(sql))
+                except Exception:
+                    pass  # Column already exists or unsupported (SQLite)
+            conn.commit()
+    except Exception:
+        pass  # Don't crash startup if migration fails
+
+_run_column_migrations()
+
 app = FastAPI(
     title="GulfTax AI API",
     version="1.0.0",

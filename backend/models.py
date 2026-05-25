@@ -64,6 +64,10 @@ class Transaction(Base):
     ai_reasoning = Column(Text)  # AI reasoning text
     is_verified = Column(Boolean, default=False)  # Manual verification flag
     verification_history = Column(JSON, nullable=True)
+    # Source tracking — where did this transaction come from?
+    source = Column(String(50), nullable=True, default="vat_classifier")
+    # "vat_classifier" | "invoice_flow_auto" | "invoice_flow_reviewed"
+    source_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     company = relationship("Company", back_populates="transactions")

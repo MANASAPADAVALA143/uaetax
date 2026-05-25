@@ -33,6 +33,8 @@ interface ProcessedInvoice {
   overall_risk: string;
   risk_score?: number;
   recommendation?: string;
+  auto_approved?: boolean;
+  transactions_created?: number;
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -105,7 +107,7 @@ export default function InvoiceFlowPage() {
           invoice_id,
           extracted,
         });
-        const { vat_result, risk_flags, overall_risk } = riskRes.data;
+        const { vat_result, risk_flags, overall_risk, auto_approved, transactions_created } = riskRes.data;
 
         processed.push({
           invoice_id,
@@ -122,6 +124,8 @@ export default function InvoiceFlowPage() {
           overall_risk,
           risk_score: riskRes.data.risk_score,
           recommendation: riskRes.data.recommendation,
+          auto_approved: auto_approved || false,
+          transactions_created: transactions_created || 0,
         });
       } catch (e: unknown) {
         const msg =
@@ -325,14 +329,37 @@ export default function InvoiceFlowPage() {
                 </div>
               )}
 
+              {/* Auto-approval confirmation (score < 30) */}
+              {inv.auto_approved && (
+                <div className="rounded-[10px] border border-green/30 bg-[rgba(45,212,160,0.08)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green text-base">✓</span>
+                    <div>
+                      <p className="text-green text-[13px] font-medium">
+                        Auto-approved · {inv.transactions_created} transaction{inv.transactions_created !== 1 ? "s" : ""} added to VAT Classifier
+                      </p>
+                      <p className="text-[11px] text-muted2 mt-0.5">Risk score {inv.risk_score}/100 — below threshold · no human review needed</p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/dashboard/vat-classifier"
+                    className="text-[12px] text-gold-lt hover:underline font-medium flex-shrink-0"
+                  >
+                    View in VAT Classifier →
+                  </Link>
+                </div>
+              )}
+
               {inv.invoice_id > 0 && (
                 <div className="flex gap-2 pt-1">
-                  <Link
-                    href="/dashboard/invoice-flow/review"
-                    className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium border border-border-g text-gold-lt bg-gold-pale hover:opacity-90 transition"
-                  >
-                    Go to Review Queue
-                  </Link>
+                  {!inv.auto_approved && (
+                    <Link
+                      href="/dashboard/invoice-flow/review"
+                      className="px-4 py-1.5 rounded-[8px] text-[12px] font-medium border border-border-g text-gold-lt bg-gold-pale hover:opacity-90 transition"
+                    >
+                      {(inv.risk_score ?? 0) > 60 ? "⚠ Go to Review Queue (Hard Block)" : "Go to Review Queue"}
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

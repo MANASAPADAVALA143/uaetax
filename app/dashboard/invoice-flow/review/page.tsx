@@ -57,11 +57,12 @@ const STATUS_BADGE: Record<string, string> = {
   pending: "bg-[rgba(255,255,255,0.06)] text-muted2 border-border",
   review: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
   approved: "bg-[rgba(45,212,160,0.12)] text-green border-green/30",
+  auto_approved: "bg-[rgba(45,212,160,0.18)] text-green border-green/40",
   escalated: "bg-[rgba(255,107,107,0.15)] text-red border-red/30",
   posted: "bg-[rgba(78,168,255,0.1)] text-blue-300 border-blue-400/30",
 };
 
-const STATUS_TABS = ["all", "pending", "review", "approved", "escalated", "posted"];
+const STATUS_TABS = ["all", "pending", "review", "approved", "auto_approved", "escalated", "posted"];
 
 export default function ReviewQueuePage() {
   const { user } = useAuth();
@@ -261,7 +262,7 @@ export default function ReviewQueuePage() {
               )}
 
               {/* Action buttons */}
-              {!["approved", "escalated", "posted"].includes(inv.status) && (
+              {!["approved", "auto_approved", "escalated", "posted"].includes(inv.status) && (
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                   <button
                     type="button"

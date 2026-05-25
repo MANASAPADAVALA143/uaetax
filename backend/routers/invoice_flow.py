@@ -789,12 +789,110 @@ Return JSON only:
     # Run all 23 anomaly checks
     risk = run_all_anomaly_checks(ex, company_id, db, payload.invoice_id, vat_result.get("vat_treatment", "standard_rated"))
 
-    # Persist
+    # ── Persist classification + risk results ─────────────────────────────────
     inv.vat_treatment = vat_result.get("vat_treatment")
     inv.confidence = vat_result.get("confidence", 0)
     inv.risk_flags = [f.model_dump() for f in risk.flags]
     inv.overall_risk = risk.risk_level.lower()
-    inv.status = "review" if risk.risk_level in ("HIGH", "MEDIUM") else "pending"
+
+    # ── Risk-gated status assignment ──────────────────────────────────────────
+    # score < 30  → auto-approve, write to transactions immediately
+    # score 30–60 → hold in review queue (AP must approve)
+    # score > 60  → hard block (Finance Manager escalation required)
+    auto_approved = False
+    transactions_created = 0
+
+    if risk.risk_score < 30:
+        inv.status = "auto_approved"
+        auto_approved = True
+
+        # Resolve invoice date
+        inv_date: date
+        if inv.invoice_date:
+            try:
+                inv_date = date.fromisoformat(str(inv.invoice_date)[:10])
+            except Exception:
+                inv_date = date.today()
+        else:
+            inv_date = date.today()
+
+        vat_treatment = inv.vat_treatment or "standard_rated"
+        line_items = inv.line_items or []
+
+        if not line_items and inv.total_aed:
+            subtotal = inv.total_aed / 1.05 if vat_treatment == "standard_rated" else inv.total_aed
+            exists = db.query(Transaction).filter(
+                and_(
+                    Transaction.company_id == company_id,
+                    Transaction.invoice_number == inv.invoice_number,
+                    Transaction.vendor_or_customer == inv.vendor_name,
+                    Transaction.amount_aed == round(subtotal, 2),
+                )
+            ).first()
+            if not exists:
+                vat_amount = round(subtotal * 0.05, 2) if vat_treatment == "standard_rated" else 0.0
+                db.add(Transaction(
+                    company_id=company_id,
+                    date=inv_date,
+                    description=inv.vendor_name or f"Invoice #{inv.invoice_number}",
+                    vendor_or_customer=inv.vendor_name,
+                    invoice_number=inv.invoice_number,
+                    transaction_type="purchase",
+                    vat_treatment=vat_treatment,
+                    amount_aed=round(subtotal, 2),
+                    vat_amount_aed=vat_amount,
+                    confidence_score=round((inv.confidence or 0.9) * 100, 1),
+                    is_verified=True,
+                    source="invoice_flow_auto",
+                    source_invoice_id=inv.id,
+                    ai_reasoning=f"Auto-approved (risk score {risk.risk_score}/100) from Invoice Flow #{inv.id}",
+                ))
+                transactions_created += 1
+        else:
+            for li in line_items:
+                desc = (li.get("description") or "").strip() or inv.vendor_name or "Invoice line item"
+                qty = float(li.get("quantity", 1) or 1)
+                unit_price = float(li.get("unit_price", 0) or 0)
+                amount = round(qty * unit_price, 2)
+                if amount <= 0:
+                    amount = round(float(li.get("amount", 0) or 0), 2)
+                if amount <= 0:
+                    continue
+                exists = db.query(Transaction).filter(
+                    and_(
+                        Transaction.company_id == company_id,
+                        Transaction.invoice_number == inv.invoice_number,
+                        Transaction.description == desc,
+                        Transaction.amount_aed == amount,
+                    )
+                ).first()
+                if exists:
+                    continue
+                vat_rate = float(li.get("vat_rate", 5) or 5)
+                vat_amount = round(amount * vat_rate / 100, 2) if vat_treatment == "standard_rated" else 0.0
+                db.add(Transaction(
+                    company_id=company_id,
+                    date=inv_date,
+                    description=desc,
+                    vendor_or_customer=inv.vendor_name,
+                    invoice_number=inv.invoice_number,
+                    transaction_type="purchase",
+                    vat_treatment=vat_treatment,
+                    amount_aed=amount,
+                    vat_amount_aed=vat_amount,
+                    confidence_score=round((inv.confidence or 0.9) * 100, 1),
+                    is_verified=True,
+                    source="invoice_flow_auto",
+                    source_invoice_id=inv.id,
+                    ai_reasoning=f"Auto-approved (risk score {risk.risk_score}/100) from Invoice Flow #{inv.id}",
+                ))
+                transactions_created += 1
+
+    elif risk.risk_score <= 60:
+        inv.status = "review"   # Hold — AP accountant must approve
+    else:
+        inv.status = "escalated"  # Hard block — Finance Manager required
+
     db.commit()
 
     return {
@@ -804,6 +902,8 @@ Return JSON only:
         "overall_risk": risk.risk_level,
         "risk_score": risk.risk_score,
         "recommendation": risk.recommendation,
+        "auto_approved": auto_approved,
+        "transactions_created": transactions_created,
     }
 
 
@@ -910,7 +1010,9 @@ def review_invoice(
                     vat_amount_aed=vat_amount,
                     confidence_score=round((inv.confidence or 0.9) * 100, 1),
                     is_verified=True,
-                    ai_reasoning=f"Auto-created from approved Invoice Flow invoice #{inv.id} · {inv.filename or ''}",
+                    source="invoice_flow_reviewed",
+                    source_invoice_id=inv.id,
+                    ai_reasoning=f"Approved by reviewer from Invoice Flow invoice #{inv.id} · {inv.filename or ''}",
                 )
                 db.add(tx)
                 transactions_created += 1
@@ -953,7 +1055,9 @@ def review_invoice(
                     vat_amount_aed=vat_amount,
                     confidence_score=round((inv.confidence or 0.9) * 100, 1),
                     is_verified=True,
-                    ai_reasoning=f"Auto-created from approved Invoice Flow invoice #{inv.id} · {inv.filename or ''}",
+                    source="invoice_flow_reviewed",
+                    source_invoice_id=inv.id,
+                    ai_reasoning=f"Approved by reviewer from Invoice Flow invoice #{inv.id} · {inv.filename or ''}",
                 )
                 db.add(tx)
                 transactions_created += 1
