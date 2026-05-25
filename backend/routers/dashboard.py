@@ -68,6 +68,30 @@ async def dashboard_summary(
         .all()
     )
 
+    # If no data in current quarter, fall back to the quarter of the most recent transaction
+    if not period_tx:
+        latest_tx = (
+            db.query(Transaction)
+            .filter(Transaction.company_id == company_id)
+            .order_by(Transaction.date.desc())
+            .first()
+        )
+        if latest_tx:
+            period_start, period_end, label = _calendar_quarter(latest_tx.date)
+            filing_deadline = _vat_filing_deadline(period_end)
+            days_to_filing = _days_between(today, filing_deadline)
+            period_tx = (
+                db.query(Transaction)
+                .filter(
+                    and_(
+                        Transaction.company_id == company_id,
+                        Transaction.date >= period_start,
+                        Transaction.date <= period_end,
+                    )
+                )
+                .all()
+            )
+
     transactions_classified = len([t for t in period_tx if t.vat_treatment])
     transactions_needing_review = len(
         [

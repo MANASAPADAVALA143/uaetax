@@ -94,13 +94,23 @@ export default function CorporateTaxPage() {
     setAutoFillLoading(true);
     setAutoFillMsg(null);
     try {
-      // Default to current FY: Jan 1 – Dec 31 of current year
-      const year = new Date().getFullYear();
+      // Detect the actual year from the most recent transaction — don't assume current year
+      let year = new Date().getFullYear();
+      try {
+        const txRes = await apiClient.get("/api/vat/transactions?limit=1");
+        const txList = Array.isArray(txRes.data) ? txRes.data : [];
+        if (txList.length > 0 && txList[0].date) {
+          year = new Date(txList[0].date).getFullYear();
+        }
+      } catch {
+        /* fall back to current year if tx fetch fails */
+      }
+
       const { data } = await apiClient.get(
         `/api/ct/from-transactions?period_start=${year}-01-01&period_end=${year}-12-31`
       );
       if (data.transaction_count === 0) {
-        setAutoFillMsg("No transactions found for this year. Upload data in VAT Classifier first.");
+        setAutoFillMsg("No transactions found. Upload data in VAT Classifier first.");
         return;
       }
       setRevenue(String(data.revenue_aed));
@@ -114,7 +124,7 @@ export default function CorporateTaxPage() {
         }));
         setAddbacks(newAddbacks);
       }
-      setAutoFillMsg(`Auto-filled from ${data.transaction_count} transactions (${data.period_start} → ${data.period_end})`);
+      setAutoFillMsg(`Auto-filled from ${data.transaction_count} transactions · FY ${year} (${data.period_start} → ${data.period_end})`);
     } catch {
       setAutoFillMsg("Could not load transaction data. Make sure you have uploaded data via VAT Classifier.");
     } finally {
