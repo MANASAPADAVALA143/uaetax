@@ -67,8 +67,16 @@ EXTRACT_PROMPT = """Extract ALL fields from this UAE VAT invoice and return JSON
   "subtotal_aed": 0,
   "discount_aed": 0,
   "vat_amount_aed": 0,
-  "total_aed": 0
+  "total_aed": 0,
+  "urgency_note": null
 }
+
+Rules:
+- payment_terms_days: parse to integer number of days. Examples: "30 days"→30, "2 DAYS URGENT"→2, "Net 15"→15, "Immediate"→0, "COD"→0. If not found leave null.
+- invoice_date: always YYYY-MM-DD, strip any weekday text e.g. "16 May 2025 (Friday)"→"2025-05-16"
+- po_reference: if shown as "N/A", "none", "nil", "-" or not present, return null
+- urgency_note: copy any urgency/pressure text verbatim e.g. "URGENT: Payment required within 2 days..." or null if absent
+- vendor_trn: if shown as "NOT REGISTERED", "[NOT REGISTERED]", "N/A" or similar, return null
 If a field is not visible leave it as null. Return JSON only — no text before or after."""
 
 
@@ -93,6 +101,7 @@ class ExtractedInvoice(BaseModel):
     payment_terms_days: Optional[int] = None
     due_date: Optional[str] = None
     po_reference: Optional[str] = None
+    urgency_note: Optional[str] = None
     currency: str = "AED"
     line_items: List[LineItem] = []
     subtotal_aed: Optional[float] = None
@@ -466,9 +475,11 @@ def run_all_anomaly_checks(
     # ANOMALY 15 — Ghost supplier (new + high value + no PO)
     if vendor:
         any_prior = db.query(Invoice).filter(
-            and_(Invoice.company_id == company_id, Invoice.vendor_name == vendor)
+            and_(Invoice.company_id == company_id, Invoice.vendor_name == vendor,
+                 Invoice.id != invoice_id)  # exclude self
         ).first()
-        has_po = bool(extracted.po_reference)
+        _po_raw = (extracted.po_reference or "").strip().lower()
+        has_po = bool(_po_raw) and _po_raw not in ("n/a", "na", "none", "nil", "-", "—", "not applicable")
         if not any_prior and total > 25_000 and not has_po:
             flags.append(AnomalyFlag(
                 flag_id=15, flag="ghost_supplier", category="fraud",
@@ -487,6 +498,7 @@ def run_all_anomaly_checks(
                 Invoice.company_id == company_id,
                 Invoice.vendor_name == vendor,
                 Invoice.status.in_(["approved", "posted"]),
+                Invoice.id != invoice_id,  # exclude self
             )
         ).order_by(Invoice.created_at).limit(20).all()
         prior_amounts = [float(r.total_aed) for r in prior_totals_q if r.total_aed]
@@ -506,18 +518,34 @@ def run_all_anomaly_checks(
                 ))
 
     # ANOMALY 17 — Urgency manipulation
-    if extracted.payment_terms_days is not None and extracted.payment_terms_days < 5:
+    # Fire if payment_terms_days < 5 OR if urgency text is present in note/terms
+    _urgency_keywords = ["urgent", "immediate", "asap", "service interruption", "within 2 days", "within 24", "within 48"]
+    _urgency_text = (extracted.urgency_note or "").lower()
+    _has_urgency_text = any(kw in _urgency_text for kw in _urgency_keywords)
+    _terms_days = extracted.payment_terms_days
+    # Also try to parse days from due_date gap
+    if _terms_days is None and extracted.due_date and inv_date:
+        try:
+            _due = date.fromisoformat(extracted.due_date)
+            _terms_days = (_due - inv_date).days
+        except Exception:
+            pass
+    _short_terms = _terms_days is not None and _terms_days < 5
+
+    if _short_terms or _has_urgency_text:
         is_new = not db.query(Invoice).filter(
-            and_(Invoice.company_id == company_id, Invoice.vendor_name == vendor, Invoice.created_at < cutoff_30)
+            and_(Invoice.company_id == company_id, Invoice.vendor_name == vendor,
+                 Invoice.created_at < cutoff_30, Invoice.id != invoice_id)
         ).first()
         severity = "HIGH" if (total > 50_000 and is_new) else "MEDIUM"
+        days_label = f"{_terms_days} day(s)" if _terms_days is not None else "an unusually short period"
         flags.append(AnomalyFlag(
             flag_id=17, flag="urgency_manipulation", category="fraud",
             severity=severity,
             title="Unusually Short Payment Terms — Urgency Pressure",
-            what_is_wrong=f"Invoice demands payment within {extracted.payment_terms_days} day(s). Normal commercial terms are 30 days. High-pressure payment requests on large invoices are a fraud indicator.",
-            action_required="Do not rush. Apply normal approval process regardless of stated due date. Verify with supplier directly via known contact.",
-            uae_law_reference="Internal controls — payment pressure fraud pattern",
+            what_is_wrong=f"Invoice demands payment within {days_label}. Normal commercial terms are 30 days. High-pressure payment requests on large invoices are a fraud indicator." + (f" Note: '{extracted.urgency_note}'" if extracted.urgency_note else ""),
+            action_required="Do not rush. Apply normal approval process regardless of stated due date. Verify with supplier directly via known contact (not the number on this invoice).",
+            uae_law_reference="FTA Audit Guide — urgency/pressure tactics are a primary invoice fraud indicator",
             vat_at_risk_aed=0,
         ))
 
