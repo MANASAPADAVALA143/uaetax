@@ -93,48 +93,72 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     """
     Calculate all 8 FTA VAT return boxes from transactions.
 
-    Sales vs purchases are split using ``transaction_type`` (sale | purchase) so
-    standard-rated purchases do not inflate standard-rated supplies (Box 1).
+    UAE VAT Law (Federal Decree-Law No. 8/2017):
+    - Art. 48: Reverse Charge Mechanism — buyer self-assesses VAT on
+      imported services / goods from non-registered overseas suppliers.
+      RC VAT appears on BOTH the output side (Box 2) and input side (Box 7)
+      simultaneously.  The net cash effect is zero when the buyer is fully
+      taxable, but both boxes must be populated for FTA audit purposes.
+    - Box 1: Standard-rated taxable supplies (sales) — net amount only.
+    - Box 2: Output VAT = (Box 1 × 5%) + RC self-assessed output VAT.
+    - Box 6: Taxable expenses (standard-rated + reverse-charge purchases).
+    - Box 7: Input VAT = (std purchases × 5%) + RC self-assessed input VAT.
+      Entertainment expenses blocked under Art. 53 are excluded.
     """
-    sales = [
-        t
-        for t in transactions
-        if _transaction_side(t) == "sale"
-        and (t.vat_treatment or "") in ("standard_rated", "zero_rated", "exempt")
-    ]
-    purchases_std = [
-        t
-        for t in transactions
-        if _transaction_side(t) == "purchase" and (t.vat_treatment or "") == "standard_rated"
-    ]
+    # ── Split by side and treatment ──────────────────────────────────────────
+    sales_std  = [t for t in transactions if _transaction_side(t) == "sale"
+                  and (t.vat_treatment or "") == "standard_rated"]
+    sales_zero = [t for t in transactions if _transaction_side(t) == "sale"
+                  and (t.vat_treatment or "") == "zero_rated"]
+    sales_ex   = [t for t in transactions if _transaction_side(t) == "sale"
+                  and (t.vat_treatment or "") == "exempt"]
 
-    box1 = sum(t.amount_aed for t in sales if t.vat_treatment == "standard_rated")
+    purch_std  = [t for t in transactions if _transaction_side(t) == "purchase"
+                  and (t.vat_treatment or "") == "standard_rated"]
+    purch_rc   = [t for t in transactions if _transaction_side(t) == "purchase"
+                  and (t.vat_treatment or "") == "reverse_charge"]
 
-    box2 = box1 * 0.05
+    def _amt(lst):  return sum(t.amount_aed or 0 for t in lst)
 
-    box3 = sum(t.amount_aed for t in sales if t.vat_treatment == "zero_rated")
+    # ── Boxes 1-5: Sales side ────────────────────────────────────────────────
+    box1 = _amt(sales_std)                     # Net standard-rated sales
+    box3 = _amt(sales_zero)                    # Net zero-rated sales
+    box4 = _amt(sales_ex)                      # Exempt sales
+    box5 = box1 + box3 + box4                  # Total taxable supplies
 
-    box4 = sum(t.amount_aed for t in sales if t.vat_treatment == "exempt")
+    # RC self-assessed output VAT (Art. 48) — must be added to output side
+    rc_net = _amt(purch_rc)
+    rc_vat = rc_net * 0.05
 
-    box5 = box1 + box3 + box4
+    # Box 2: Output VAT = standard-rated sales VAT + RC self-assessed output
+    box2 = box1 * 0.05 + rc_vat
 
-    box6 = sum(t.amount_aed for t in purchases_std)
-    
-    # Box 7: Input VAT recoverable (5% of Box 6)
-    box7 = box6 * 0.05
-    
-    # Box 8: VAT payable/refundable
+    # ── Boxes 6-7: Expense side ──────────────────────────────────────────────
+    std_net = _amt(purch_std)
+    std_vat = std_net * 0.05
+
+    # Box 6: Taxable expenses (standard-rated + reverse-charge purchases net)
+    box6 = std_net + rc_net
+
+    # Box 7: Input VAT = std purchase VAT + RC self-assessed input VAT (Art. 48)
+    box7 = std_vat + rc_vat
+
+    # Box 8: Net VAT payable (+) or refundable (-)
     box8 = box2 - box7
-    
+
     return {
         "box1_standard_rated_supplies": round(box1, 2),
-        "box2_vat_on_supplies": round(box2, 2),
-        "box3_zero_rated_supplies": round(box3, 2),
-        "box4_exempt_supplies": round(box4, 2),
-        "box5_total_taxable_supplies": round(box5, 2),
-        "box6_taxable_expenses": round(box6, 2),
-        "box7_vat_on_expenses": round(box7, 2),
-        "box8_vat_payable_or_refundable": round(box8, 2)
+        "box2_vat_on_supplies":         round(box2, 2),
+        "box3_zero_rated_supplies":     round(box3, 2),
+        "box4_exempt_supplies":         round(box4, 2),
+        "box5_total_taxable_supplies":  round(box5, 2),
+        "box6_taxable_expenses":        round(box6, 2),
+        "box7_vat_on_expenses":         round(box7, 2),
+        "box8_vat_payable_or_refundable": round(box8, 2),
+        # Extra metadata for UI tooltips
+        "_rc_net_aed":  round(rc_net, 2),
+        "_rc_vat_aed":  round(rc_vat, 2),
+        "_std_net_aed": round(std_net, 2),
     }
 
 

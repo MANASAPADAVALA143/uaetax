@@ -50,6 +50,11 @@ interface BoxState {
   box8_vat_payable_or_refundable: number;
 }
 
+interface RCMeta {
+  rc_net_aed: number;
+  rc_vat_aed: number;
+}
+
 const ZERO_BOXES: BoxState = {
   box1_standard_rated_supplies: 0,
   box2_vat_on_supplies: 0,
@@ -93,6 +98,7 @@ export default function VATReturnPage() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<"pdf" | "excel" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rcMeta, setRcMeta] = useState<RCMeta | null>(null);
 
   const period = useMemo(() => quarterToRange(quarter, year), [quarter, year]);
 
@@ -115,6 +121,9 @@ export default function VATReturnPage() {
         box7_vat_on_expenses: Number(data.box7_vat_on_expenses) || 0,
         box8_vat_payable_or_refundable: Number(data.box8_vat_payable_or_refundable) || 0,
       });
+      const rcNet = Number(data._rc_net_aed) || 0;
+      const rcVat = Number(data._rc_vat_aed) || 0;
+      setRcMeta(rcNet > 0 ? { rc_net_aed: rcNet, rc_vat_aed: rcVat } : null);
       const id = Number(data.return_id);
       setReturnId(id);
       setStatus(data.status || "draft");
@@ -270,6 +279,22 @@ export default function VATReturnPage() {
               Box {b.n} · {b.title}
             </div>
             <div className="font-mono text-lg text-white">{fmtAed(boxes[b.key])}</div>
+            {/* RC disclosure notes — Art. 48 UAE VAT Law */}
+            {b.n === 2 && rcMeta && rcMeta.rc_vat_aed > 0 && (
+              <div className="text-[10px] text-purple-300/70 font-mono mt-0.5">
+                Incl. {fmtAed(rcMeta.rc_vat_aed)} reverse charge output VAT (Art. 48)
+              </div>
+            )}
+            {b.n === 6 && rcMeta && rcMeta.rc_net_aed > 0 && (
+              <div className="text-[10px] text-purple-300/70 font-mono mt-0.5">
+                Incl. {fmtAed(rcMeta.rc_net_aed)} reverse charge expenses (self-assessed, Art. 48)
+              </div>
+            )}
+            {b.n === 7 && rcMeta && rcMeta.rc_vat_aed > 0 && (
+              <div className="text-[10px] text-purple-300/70 font-mono mt-0.5">
+                Incl. {fmtAed(rcMeta.rc_vat_aed)} reverse charge input VAT (Art. 48)
+              </div>
+            )}
           </div>
         ))}
       </div>
