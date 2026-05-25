@@ -186,6 +186,7 @@ def run_all_anomaly_checks(
     extracted: ExtractedInvoice,
     company_id: int,
     db: Session,
+    invoice_id: int = 0,
     vat_treatment: str = "standard_rated",
 ) -> RiskResult:
     flags: List[AnomalyFlag] = []
@@ -786,7 +787,7 @@ Return JSON only:
         }
 
     # Run all 23 anomaly checks
-    risk = run_all_anomaly_checks(ex, company_id, db, vat_result.get("vat_treatment", "standard_rated"))
+    risk = run_all_anomaly_checks(ex, company_id, db, req.invoice_id, vat_result.get("vat_treatment", "standard_rated"))
 
     # Persist
     inv.vat_treatment = vat_result.get("vat_treatment")
