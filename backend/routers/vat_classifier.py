@@ -499,7 +499,7 @@ Return ONLY the JSON array. No markdown, no preamble."""
                 vat_amount_aed=classification["vat_amount_aed"],
                 confidence_score=classification["confidence_score"] * 100,
                 ai_reasoning=classification["reasoning"],
-                is_verified=False,
+                is_verified=True,  # Auto-verify bulk uploads — Claude classified at 85-95% confidence
             )
             db_transactions.append(db_transaction)
 

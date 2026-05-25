@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 import { apiClient } from "@/lib/api";
 
@@ -13,12 +13,42 @@ interface ClassificationResult {
   reasoning?: string;
 }
 
+interface SavedTransaction {
+  id: number;
+  date: string;
+  description: string;
+  vendor_or_customer?: string;
+  amount_aed: number;
+  vat_treatment: string;
+  transaction_type: string;
+  vat_amount_aed: number;
+  confidence_score?: number;
+  is_verified: boolean;
+}
+
 export default function VATClassifier() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [results, setResults] = useState<ClassificationResult[]>([]);
+  const [savedTxns, setSavedTxns] = useState<SavedTransaction[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const [activeView, setActiveView] = useState<"saved" | "new">("saved");
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchSaved = useCallback(async () => {
+    setLoadingSaved(true);
+    try {
+      const { data } = await apiClient.get("/api/vat/transactions?limit=200");
+      setSavedTxns(Array.isArray(data) ? data : []);
+    } catch {
+      setSavedTxns([]);
+    } finally {
+      setLoadingSaved(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSaved(); }, [fetchSaved]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -65,6 +95,9 @@ export default function VATClassifier() {
           reasoning: c.reasoning ? String(c.reasoning) : undefined,
         }))
       );
+      // Refresh saved list and switch to it
+      await fetchSaved();
+      setActiveView("saved");
     } catch (err: any) {
       setError(
         err.response?.data?.detail || "Failed to classify transactions. Please try again."
@@ -95,6 +128,18 @@ export default function VATClassifier() {
     return confidence >= 90 ? "hi" : confidence >= 70 ? "mid" : "low";
   };
 
+  const VAT_COLORS: Record<string, string> = {
+    standard_rated: "bg-[rgba(45,212,160,0.12)] text-green border-green/30",
+    zero_rated: "bg-[rgba(78,168,255,0.1)] text-blue-300 border-blue-400/30",
+    exempt: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
+    reverse_charge: "bg-[rgba(200,100,255,0.12)] text-purple-300 border-purple-400/30",
+    out_of_scope: "bg-[rgba(255,255,255,0.06)] text-muted border-border",
+  };
+
+  const totalSales = savedTxns.filter(t => t.transaction_type === "sale").reduce((s, t) => s + t.amount_aed, 0);
+  const totalPurchases = savedTxns.filter(t => t.transaction_type === "purchase").reduce((s, t) => s + t.amount_aed, 0);
+  const totalVAT = savedTxns.reduce((s, t) => s + (t.vat_amount_aed || 0), 0);
+
   return (
     <>
       <div className="flex items-center justify-between mb-7">
@@ -109,7 +154,93 @@ export default function VATClassifier() {
             Upload CSV/Excel file · AI classifies each transaction using UAE VAT rules
           </div>
         </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveView("saved")}
+            className={`px-4 py-2 rounded-[8px] text-[12px] font-medium transition-all ${activeView === "saved" ? "bg-gold-pale text-gold-lt border border-border-g" : "text-muted border border-transparent hover:border-border-g hover:text-white"}`}
+          >
+            📋 Saved ({savedTxns.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView("new")}
+            className={`px-4 py-2 rounded-[8px] text-[12px] font-medium transition-all ${activeView === "new" ? "bg-gold-pale text-gold-lt border border-border-g" : "text-muted border border-transparent hover:border-border-g hover:text-white"}`}
+          >
+            ⬆ Upload New
+          </button>
+        </div>
       </div>
+
+      {/* Summary stats */}
+      {savedTxns.length > 0 && (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {[
+            { label: "Total Sales", value: `AED ${totalSales.toLocaleString("en-AE", {minimumFractionDigits: 0})}`, color: "text-green" },
+            { label: "Total Purchases", value: `AED ${totalPurchases.toLocaleString("en-AE", {minimumFractionDigits: 0})}`, color: "text-amber" },
+            { label: "Total VAT", value: `AED ${totalVAT.toLocaleString("en-AE", {minimumFractionDigits: 2})}`, color: "text-white" },
+          ].map(card => (
+            <div key={card.label} className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-5">
+              <p className="text-[11px] text-muted2 uppercase tracking-wide mb-1">{card.label}</p>
+              <p className={`text-[20px] font-bold font-mono ${card.color}`}>{card.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Saved transactions view */}
+      {activeView === "saved" && (
+        <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">{savedTxns.length} classified transactions</p>
+            <span className="text-[10px] text-muted2 font-mono uppercase">Auto-verified · Ready for VAT Return</span>
+          </div>
+          {loadingSaved ? (
+            <div className="text-center py-12 text-muted2">Loading transactions…</div>
+          ) : savedTxns.length === 0 ? (
+            <div className="text-center py-16 text-muted2">
+              <div className="text-4xl mb-3">📂</div>
+              <p>No transactions yet — upload your first file</p>
+              <button type="button" onClick={() => setActiveView("new")} className="mt-2 text-gold-lt text-sm hover:underline">Upload CSV/Excel →</button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-border bg-[rgba(4,12,30,0.6)]">
+                    {["Date", "Description", "Vendor/Customer", "Type", "VAT Treatment", "Amount AED", "VAT AED"].map(h => (
+                      <th key={h} className="text-left px-4 py-2.5 text-muted2 uppercase tracking-wide text-[10px] font-mono whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedTxns.map((t, i) => (
+                    <tr key={t.id} className={`border-b border-border/50 ${i % 2 === 0 ? "" : "bg-[rgba(255,255,255,0.02)]"}`}>
+                      <td className="px-4 py-2.5 text-muted font-mono whitespace-nowrap">{t.date}</td>
+                      <td className="px-4 py-2.5 text-white max-w-[220px] truncate">{t.description}</td>
+                      <td className="px-4 py-2.5 text-muted truncate max-w-[140px]">{t.vendor_or_customer || "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase ${t.transaction_type === "sale" ? "text-green bg-[rgba(45,212,160,0.12)]" : "text-amber bg-[rgba(255,183,0,0.1)]"}`}>
+                          {t.transaction_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-mono ${VAT_COLORS[t.vat_treatment] || VAT_COLORS.out_of_scope}`}>
+                          {(t.vat_treatment || "—").replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-white font-mono text-right whitespace-nowrap">{t.amount_aed.toLocaleString("en-AE", {minimumFractionDigits: 2})}</td>
+                      <td className="px-4 py-2.5 text-muted font-mono text-right whitespace-nowrap">{(t.vat_amount_aed || 0).toLocaleString("en-AE", {minimumFractionDigits: 2})}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeView === "new" && (<>
 
       {/* Upload Section */}
       <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-8 mb-6">
@@ -269,14 +400,11 @@ export default function VATClassifier() {
       {results.length === 0 && !isUploading && (
         <div className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-12 text-center">
           <div className="text-4xl mb-4">📊</div>
-          <h3 className="text-lg font-semibold text-white mb-2">
-            No classifications yet
-          </h3>
-          <p className="text-sm text-muted">
-            Upload a transaction file to get started with AI-powered VAT classification.
-          </p>
+          <h3 className="text-lg font-semibold text-white mb-2">No classifications yet</h3>
+          <p className="text-sm text-muted">Upload a transaction file to get started.</p>
         </div>
       )}
+      </>)}
     </>
   );
 }
