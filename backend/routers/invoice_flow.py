@@ -213,6 +213,7 @@ def run_all_anomaly_checks(
                 Invoice.invoice_number == inv_no,
                 Invoice.total_aed == total,
                 Invoice.created_at >= cutoff_90,
+                Invoice.id != invoice_id,  # exclude self
             )
         ).first()
         if dup:
@@ -233,6 +234,7 @@ def run_all_anomaly_checks(
                 Invoice.company_id == company_id,
                 Invoice.vendor_name == vendor,
                 Invoice.created_at >= cutoff_90,
+                Invoice.id != invoice_id,  # exclude self
             )
         ).limit(20).all()
         for r in recent_invs:
@@ -262,6 +264,7 @@ def run_all_anomaly_checks(
                 Invoice.vendor_name == vendor,
                 Invoice.total_aed == total,
                 Invoice.created_at >= cutoff_30,
+                Invoice.id != invoice_id,  # exclude self
             )
         ).first()
         if same_amt and same_amt.invoice_number != inv_no:
@@ -282,6 +285,7 @@ def run_all_anomaly_checks(
                 Invoice.company_id == company_id,
                 Invoice.vendor_name == vendor,
                 Invoice.created_at >= cutoff_30,
+                Invoice.id != invoice_id,  # exclude self
             )
         ).all()
         period_total = sum((r.total_aed or 0) for r in period_invs)
