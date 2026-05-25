@@ -125,7 +125,7 @@ def fta_transaction_listing(
                 "amount_aed": t.amount_aed,
                 "vat_amount_aed": t.vat_amount_aed or 0,
                 "total_aed": round((t.amount_aed or 0) + (t.vat_amount_aed or 0), 2),
-                "confidence": t.confidence,
+                "confidence": t.confidence_score,
             }
             for t in txns
         ],

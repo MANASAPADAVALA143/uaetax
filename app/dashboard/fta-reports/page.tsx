@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
 
 type Tab = "summary" | "transactions" | "ap-risk";
@@ -62,14 +62,22 @@ function fmtAed(n: number) {
 
 export default function FTAReportsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("summary");
-  const [periodStart, setPeriodStart] = useState(() => {
-    const y = new Date().getFullYear();
-    return `${y}-01-01`;
-  });
-  const [periodEnd, setPeriodEnd] = useState(() => {
-    const y = new Date().getFullYear();
-    return `${y}-12-31`;
-  });
+  const [periodStart, setPeriodStart] = useState(`${new Date().getFullYear()}-01-01`);
+  const [periodEnd, setPeriodEnd] = useState(`${new Date().getFullYear()}-12-31`);
+
+  // Detect actual data year from most recent transaction on mount
+  useEffect(() => {
+    apiClient.get("/api/vat/transactions?limit=1")
+      .then(res => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        if (list.length > 0 && list[0].date) {
+          const y = new Date(list[0].date).getFullYear();
+          setPeriodStart(`${y}-01-01`);
+          setPeriodEnd(`${y}-12-31`);
+        }
+      })
+      .catch(() => { /* keep current year default */ });
+  }, []);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
