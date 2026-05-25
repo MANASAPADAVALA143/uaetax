@@ -1,6 +1,6 @@
 Date,Description,Supplier / Customer,Amount AED,Transaction Type
-2025-01-05,Consulting services to ABC Corp Dubai,ABC Corp LLC,50000,sale
-2025-01-08,Export of goods to Saudi Arabia FOB Jebel Ali,Saudi Exports Co,200000,sale
-2025-01-15,Cloud hosting services AWS Ireland,Amazon Web Services EMEA,35000,purchase
-2025-01-25,Residential apartment lease Dubai,Al Waha Properties,90000,sale
-2025-01-31,Dividend income from subsidiary,GulfTax Holdings Ltd,500000,sale
+05-01-2025,Consulting services to ABC Corp Dubai,ABC Corp LLC,50000,sale
+08-01-2025,Export of goods to Saudi Arabia FOB Jebel Ali,Saudi Exports Co,200000,sale
+15-01-2025,Cloud hosting services AWS Ireland,Amazon Web Services EMEA,35000,purchase
+25-01-2025,Residential apartment lease Dubai,Al Waha Properties,90000,sale
+31-01-2025,Dividend income from subsidiary,GulfTax Holdings Ltd,500000,sale

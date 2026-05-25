@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import Nav from "@/components/Nav";
+import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardLayout({
   children,
@@ -12,7 +13,16 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { companies, loading } = useAuth();
   const [activeNav, setActiveNav] = useState("overview");
+
+  // Redirect to setup if logged in but no company exists
+  useEffect(() => {
+    if (!loading && companies.length === 0) {
+      router.push("/setup-company");
+    }
+  }, [loading, companies, router]);
 
   type MainNavItem = {
     id: string;
@@ -38,6 +48,7 @@ export default function DashboardLayout({
       mandateCountdown: true,
     },
     { id: "vat-classifier", label: "VAT Classifier", icon: "📊", href: "/dashboard/vat-classifier" },
+    { id: "invoice-flow", label: "Invoice Flow", icon: "🧾", href: "/dashboard/invoice-flow" },
     { id: "vat-return", label: "VAT Return", icon: "📋", href: "/dashboard/vat-return" },
     { id: "recon", label: "Recon Bot", icon: "🔍", href: "/dashboard/recon" },
   ];

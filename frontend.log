@@ -1,0 +1,59 @@
+
+> gulftax-ai@1.0.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.1s
+ ✓ Compiled /middleware in 416ms
+ ✓ Compiled (72 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 17.9s (827 modules)
+ GET / 200 in 19397ms
+ ✓ Compiled in 1497ms (368 modules)
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 5.7s (813 modules)
+ GET / 200 in 2101ms
+ ○ Compiling /dashboard/vat-classifier ...
+ ✓ Compiled /dashboard/e-invoicing in 3.8s (811 modules)
+ ○ Compiling /dashboard/vat-return ...
+ ✓ Compiled /dashboard/vat-return in 912ms (817 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 6.2s (834 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 7010ms
+ ✓ Compiled in 2.2s (831 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 4s (820 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 4793ms
+ GET /dashboard/vat-classifier 200 in 1870ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 183ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 476ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 179ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 86ms
+ GET /dashboard/vat-classifier 200 in 231ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 87ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 568ms
+ GET /dashboard/vat-classifier 200 in 481ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 186ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 979ms
+ GET /dashboard/vat-classifier 200 in 380ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 132ms
+ GET /dashboard/vat-classifier 200 in 410ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 118ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 71ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 112ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 82ms
+ GET /dashboard/vat-classifier 200 in 269ms
+ GET /dashboard/vat-classifier 200 in 333ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 349ms
+   Reload env: .env.local
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 7.5s (906 modules)
+ GET /dashboard/vat-classifier 200 in 3375ms
+ GET /dashboard/vat-classifier 200 in 618ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 87ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 116ms

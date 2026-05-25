@@ -188,6 +188,37 @@ class AuditLog(Base):
     company = relationship("Company", back_populates="audit_logs")
 
 
+class Invoice(Base):
+    """AI-extracted and classified invoice for AP review queue."""
+    __tablename__ = "invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    filename = Column(String(255), nullable=True)
+    vendor_name = Column(String(255), nullable=True, index=True)
+    vendor_trn = Column(String(50), nullable=True)
+    invoice_number = Column(String(100), nullable=True, index=True)
+    invoice_date = Column(String(20), nullable=True)
+    line_items = Column(JSON, nullable=True)
+    subtotal_aed = Column(Float, nullable=True)
+    vat_amount_aed = Column(Float, nullable=True)
+    total_aed = Column(Float, nullable=True)
+    extracted_json = Column(JSON, nullable=True)
+    vat_treatment = Column(String(50), nullable=True)
+    confidence = Column(Float, nullable=True)
+    risk_flags = Column(JSON, nullable=True)
+    overall_risk = Column(String(20), nullable=True)   # clear | review | escalate
+    status = Column(String(30), default="pending", nullable=False, index=True)
+    # pending | review | approved | escalated | posted
+    reviewed_by = Column(String(255), nullable=True)
+    review_reason = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    zoho_bill_id = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    company = relationship("Company", backref="invoices")
+
+
 class GLImportResult(Base):
     """Inbound GL parse results pushed from n8n workflows."""
     __tablename__ = "gl_import_results"

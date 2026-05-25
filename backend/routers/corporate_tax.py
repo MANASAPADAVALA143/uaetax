@@ -195,6 +195,67 @@ async def get_ct_return(
     }
 
 
+class NarrativeRequest(BaseModel):
+    accounting_profit: float
+    taxable_income: float
+    ct_liability: float
+    entity_type: str = "mainland"
+    addbacks: List[CTLineItem] = Field(default_factory=list)
+    deductions: List[CTLineItem] = Field(default_factory=list)
+    sbr_elected: bool = False
+    filing_deadline: Optional[str] = None
+
+
+@router.post("/narrative")
+async def generate_narrative(
+    payload: NarrativeRequest,
+    _company_id: int = Depends(get_current_company_id),
+):
+    """Generate AI CT advisory narrative for CFO."""
+    if claude_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY not configured.",
+        )
+
+    add_lines = "\n".join(f"  - {a.label}: AED {a.amount:,.0f}" for a in payload.addbacks if a.amount)
+    ded_lines = "\n".join(f"  - {d.label}: AED {d.amount:,.0f}" for d in payload.deductions if d.amount)
+    entity_label = {
+        "mainland": "Mainland taxable person",
+        "free_zone_qfzp": "Qualifying Free Zone Person (QFZP)",
+        "free_zone_other": "Free Zone — non-qualifying",
+    }.get(payload.entity_type, payload.entity_type)
+
+    prompt = f"""You are a senior UAE Corporate Tax advisor writing a concise advisory note for a CFO.
+
+Entity type: {entity_label}
+Accounting profit: AED {payload.accounting_profit:,.0f}
+Add-backs (non-deductible items):{chr(10) + add_lines if add_lines else " None"}
+Deductions / reliefs:{chr(10) + ded_lines if ded_lines else " None"}
+Taxable income: AED {payload.taxable_income:,.0f}
+Estimated CT liability: AED {payload.ct_liability:,.0f}
+Small Business Relief elected: {"Yes" if payload.sbr_elected else "No"}
+Filing deadline: {payload.filing_deadline or "9 months after fiscal year end"}
+
+Write exactly 3 paragraphs (no headings, no bullet points, plain prose):
+1. What drove the CT liability — key factors, add-backs, and their UAE CT Law basis (Federal Decree-Law No. 47 of 2022)
+2. Key deductions and reliefs to review before filing — specific opportunities relevant to this entity
+3. Filing obligations, deadline, and recommended next steps
+
+Write in a professional but clear tone. Do not use markdown formatting."""
+
+    try:
+        msg = claude_client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=700,
+            temperature=0.3,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return {"narrative": msg.content[0].text.strip()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Claude narrative failed: {exc}") from exc
+
+
 @router.post("/suggest-addbacks")
 async def suggest_addbacks(
     payload: SuggestAddbacksRequest,

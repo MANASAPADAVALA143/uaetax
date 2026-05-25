@@ -49,7 +49,6 @@ claude_client = Anthropic(api_key=anthropic_api_key) if anthropic_api_key else N
 
 # Pydantic models
 class GenerateReturnRequest(BaseModel):
-    company_id: int = Field(..., description="Company ID")
     period_start: date = Field(..., description="Period start date")
     period_end: date = Field(..., description="Period end date")
 
