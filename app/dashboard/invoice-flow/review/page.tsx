@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
@@ -66,14 +67,48 @@ const STATUS_TABS = ["all", "pending", "review", "approved", "auto_approved", "e
 
 export default function ReviewQueuePage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all");
+  // Initialise from ?status= URL param (e.g. Dashboard "Action Required" links)
+  const [activeTab, setActiveTab] = useState(() => {
+    const param = searchParams.get("status");
+    return STATUS_TABS.includes(param ?? "") ? (param as string) : "all";
+  });
   const [overrideModal, setOverrideModal] = useState<InvoiceRow | null>(null);
   const [overrideTreatment, setOverrideTreatment] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [approvalBanner, setApprovalBanner] = useState<{ invoiceName: string; txCount: number } | null>(null);
+  const [vendorProfile, setVendorProfile] = useState<{
+    vendor_name: string;
+    invoice_count: number;
+    profile: {
+      average_invoice_aed: number;
+      max_invoice_aed: number;
+      min_invoice_aed: number;
+      typical_vat_treatment: string | null;
+      first_seen: string | null;
+      last_seen: string | null;
+      price_trend: string | null;
+    } | null;
+  } | null>(null);
+  const [vendorLoading, setVendorLoading] = useState(false);
+
+  const openVendorProfile = async (vendorName: string) => {
+    setVendorLoading(true);
+    setVendorProfile(null);
+    try {
+      const { data } = await apiClient.get(
+        `/api/invoice/supplier-profile/${encodeURIComponent(vendorName)}`
+      );
+      setVendorProfile(data);
+    } catch {
+      setVendorProfile({ vendor_name: vendorName, invoice_count: 0, profile: null });
+    } finally {
+      setVendorLoading(false);
+    }
+  };
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
@@ -213,7 +248,19 @@ export default function ReviewQueuePage() {
             <div key={inv.id} className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-6">
               <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                 <div>
-                  <p className="text-white font-semibold">{inv.vendor_name || inv.filename}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-white font-semibold">{inv.vendor_name || inv.filename}</p>
+                    {inv.vendor_name && (
+                      <button
+                        type="button"
+                        onClick={() => openVendorProfile(inv.vendor_name!)}
+                        title="View vendor history"
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border text-muted2 hover:border-border-g hover:text-gold-lt transition-all"
+                      >
+                        📊 Profile
+                      </button>
+                    )}
+                  </div>
                   <p className="text-[12px] text-muted2 font-mono">{inv.filename}</p>
                   {inv.vendor_trn && (
                     <p className="text-[11px] text-muted2">TRN: <span className="font-mono">{inv.vendor_trn}</span></p>
@@ -292,6 +339,75 @@ export default function ReviewQueuePage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Vendor profile side panel */}
+      {(vendorProfile || vendorLoading) && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm" onClick={() => setVendorProfile(null)}>
+          <div
+            className="w-full max-w-sm bg-[#071228] border-l border-border h-full overflow-y-auto p-7 flex flex-col gap-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold text-base">Vendor Profile</h3>
+              <button
+                type="button"
+                onClick={() => setVendorProfile(null)}
+                className="text-muted2 text-[20px] leading-none hover:text-white transition"
+              >
+                ×
+              </button>
+            </div>
+
+            {vendorLoading && (
+              <div className="text-muted2 text-sm animate-pulse">Loading vendor history…</div>
+            )}
+
+            {vendorProfile && !vendorLoading && (
+              <>
+                <div>
+                  <p className="text-gold-lt font-semibold text-[15px]">{vendorProfile.vendor_name}</p>
+                  <p className="text-[12px] text-muted2 mt-0.5">
+                    {vendorProfile.invoice_count} invoice{vendorProfile.invoice_count !== 1 ? "s" : ""} on record
+                  </p>
+                </div>
+
+                {vendorProfile.profile ? (
+                  <div className="space-y-3">
+                    {[
+                      { label: "Avg invoice", value: `AED ${vendorProfile.profile.average_invoice_aed.toLocaleString("en-AE", { minimumFractionDigits: 2 })}` },
+                      { label: "Max invoice", value: `AED ${vendorProfile.profile.max_invoice_aed.toLocaleString("en-AE", { minimumFractionDigits: 2 })}` },
+                      { label: "Min invoice", value: `AED ${vendorProfile.profile.min_invoice_aed.toLocaleString("en-AE", { minimumFractionDigits: 2 })}` },
+                      { label: "Typical VAT treatment", value: vendorProfile.profile.typical_vat_treatment?.replace(/_/g, " ") ?? "—" },
+                      { label: "First seen", value: vendorProfile.profile.first_seen ? new Date(vendorProfile.profile.first_seen).toLocaleDateString() : "—" },
+                      { label: "Last seen", value: vendorProfile.profile.last_seen ? new Date(vendorProfile.profile.last_seen).toLocaleDateString() : "—" },
+                      { label: "Price trend", value: vendorProfile.profile.price_trend ?? "Insufficient data" },
+                    ].map(row => (
+                      <div key={row.label} className="flex items-center justify-between text-[12px] border-b border-border pb-2">
+                        <span className="text-muted2">{row.label}</span>
+                        <span className="text-white font-mono">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[10px] border border-border bg-[rgba(255,255,255,0.03)] px-4 py-4 text-[13px] text-muted2 text-center">
+                    No prior invoice history for this vendor
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <p className="text-[11px] text-muted2 uppercase tracking-wide mb-2">Quick actions</p>
+                  <Link
+                    href="/dashboard/fta-reports"
+                    className="block text-[12px] text-gold-lt hover:underline"
+                  >
+                    View all transactions for this period →
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
