@@ -101,7 +101,17 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    import anthropic as _ant
+    try:
+        _key = os.getenv("ANTHROPIC_API_KEY", "")
+        return {
+            "status": "healthy",
+            "anthropic_version": _ant.__version__,
+            "api_key_set": bool(_key) and len(_key) > 10,
+            "allowed_origins": ALLOWED_ORIGINS,
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 @app.get("/api/health")
