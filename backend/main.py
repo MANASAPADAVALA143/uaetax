@@ -67,8 +67,9 @@ app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
 # Authorization and X-Company-ID must be in allow_headers for auth to work
 _default_origins = (
     "https://uaetax-production.up.railway.app,"
+    "https://uaetax.vercel.app,"
+    "https://uaetax-manasapadavala143.vercel.app,"
     "https://gulftax.vercel.app,"
-    "https://*.vercel.app,"
     "http://localhost:3000,"
     "http://localhost:3001,"
     "http://127.0.0.1:3000,"
