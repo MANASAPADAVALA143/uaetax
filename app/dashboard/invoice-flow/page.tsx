@@ -134,7 +134,7 @@ export default function InvoiceFlowPage() {
         processed.push({
           invoice_id: 0,
           filename: file.name,
-          risk_flags: [{ flag: "error", severity: "high", message: String(msg) }],
+          risk_flags: [{ flag_id: 0, flag: "error", category: "error", severity: "HIGH", title: "Processing Error", what_is_wrong: String(msg), action_required: "Check file and retry", uae_law_reference: "", vat_at_risk_aed: 0 }],
           overall_risk: "escalate",
         });
       }
