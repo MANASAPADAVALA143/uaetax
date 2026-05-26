@@ -1,9 +1,11 @@
 """FastAPI main application"""
 import os
+import traceback
 from datetime import datetime
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from dotenv import load_dotenv
 
@@ -92,6 +94,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch ALL unhandled exceptions — return JSON with CORS headers so browser never sees a bare CORS error."""
+    origin = request.headers.get("origin", "")
+    tb = traceback.format_exc()
+    response = JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {type(exc).__name__}: {exc}", "traceback": tb[-2000:]},
+    )
+    response.headers["Access-Control-Allow-Origin"] = origin or "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 @app.get("/")
