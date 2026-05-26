@@ -631,7 +631,8 @@ def run_all_anomaly_checks(
     # ANOMALY 20c — Travel/reimbursement line item detected
     _travel_keywords = ["travel", "accommodation", "hotel", "reimbursement", "flight", "airline", "per diem", "subsistence", "lodging"]
     _line_descs_low = " ".join(
-        (li.get("description", "") or "").lower()
+        (li.description or "").lower() if hasattr(li, "description")
+        else (li.get("description", "") or "").lower()
         for li in (extracted.line_items or [])
     )
     _has_travel_line = any(kw in _line_descs_low for kw in _travel_keywords)
@@ -808,9 +809,25 @@ def classify_and_risk(
     db: Session = Depends(get_db),
 ):
     """Run VAT classification + all 23 UAE anomaly checks."""
+    import traceback as _tb
+    print(f"[classify-and-risk] START invoice_id={payload.invoice_id} company_id={company_id}", flush=True)
+    try:
+        return _classify_and_risk_inner(payload, company_id, db)
+    except Exception as _e:
+        _trace = _tb.format_exc()
+        print(f"[classify-and-risk] CRASH: {_e}\n{_trace}", flush=True)
+        raise HTTPException(status_code=500, detail=f"classify-and-risk failed: {type(_e).__name__}: {_e}  |  {_trace[-1000:]}")
+
+
+def _classify_and_risk_inner(
+    payload: ClassifyRiskRequest,
+    company_id: int,
+    db,
+):
     if claude_client is None:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
 
+    print(f"[classify-and-risk] querying invoice from DB", flush=True)
     inv = db.query(Invoice).filter(
         Invoice.id == payload.invoice_id, Invoice.company_id == company_id
     ).first()
@@ -839,6 +856,7 @@ Return JSON only:
   "reasoning": "brief explanation"
 }}"""
 
+    print(f"[classify-and-risk] calling Claude for VAT classification", flush=True)
     try:
         msg = claude_client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -847,7 +865,9 @@ Return JSON only:
             messages=[{"role": "user", "content": classify_prompt}],
         )
         vat_result = _extract_json(msg.content[0].text)
+        print(f"[classify-and-risk] Claude VAT result: {vat_result.get('vat_treatment')}", flush=True)
     except Exception as exc:
+        print(f"[classify-and-risk] Claude VAT error: {exc}", flush=True)
         vat_result = {
             "vat_treatment": "standard_rated",
             "confidence": 0.5,
@@ -855,8 +875,10 @@ Return JSON only:
             "reasoning": f"Classification failed: {exc}",
         }
 
+    print(f"[classify-and-risk] running anomaly checks", flush=True)
     # Run all 23 anomaly checks
     risk = run_all_anomaly_checks(ex, company_id, db, payload.invoice_id, vat_result.get("vat_treatment", "standard_rated"))
+    print(f"[classify-and-risk] anomaly checks done, score={risk.risk_score}", flush=True)
 
     # ── Persist classification + risk results ─────────────────────────────────
     inv.vat_treatment = vat_result.get("vat_treatment")
