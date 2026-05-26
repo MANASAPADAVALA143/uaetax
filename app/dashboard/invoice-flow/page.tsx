@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useRef, useState } from "react";
 import { apiClient } from "@/lib/api";
 import Link from "next/link";
