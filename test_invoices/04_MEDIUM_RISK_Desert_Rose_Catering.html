@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Tax Invoice – Desert Rose Catering | INV-DRC-2025-3318</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:40px}
+  .page{max-width:800px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .header{background:linear-gradient(135deg,#7c2d12 0%,#c2410c 100%);color:#fff;padding:32px 36px;display:flex;justify-content:space-between;align-items:flex-start}
+  .brand-name{font-size:24px;font-weight:700;letter-spacing:-0.3px}
+  .brand-sub{font-size:10.5px;opacity:0.8;margin-top:3px}
+  .brand-detail{font-size:10.5px;opacity:0.7;margin-top:10px;line-height:1.6}
+  .invoice-meta{text-align:right}
+  .inv-label{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.06em}
+  .inv-value{font-size:14px;font-weight:600;margin-top:2px}
+  .tax-badge{background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.4);border-radius:4px;padding:6px 14px;text-align:center;margin-top:10px;font-size:13px;font-weight:700;letter-spacing:0.05em}
+  .body{padding:32px 36px}
+  .parties{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #f0f0f0}
+  .party-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#7c2d12;font-weight:600;margin-bottom:8px}
+  .party-name{font-size:13px;font-weight:600;margin-bottom:4px}
+  .party-detail{color:#555;line-height:1.6;font-size:11px}
+  .trn-badge{display:inline-block;background:#fff7ed;border:1px solid #fdba74;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:600;color:#9a3412;margin-top:6px}
+  .meta-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;background:#fff7ed;border-radius:6px;padding:14px}
+  .meta-item .mlabel{font-size:10px;color:#a16207;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px}
+  .meta-item .mvalue{font-size:12px;font-weight:600}
+  .risk-note{background:#fef3c7;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:20px;font-size:11px;color:#78350f}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  thead{background:#7c2d12;color:#fff}
+  thead th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+  tbody tr{border-bottom:1px solid #f3f4f6}
+  tbody tr:nth-child(even){background:#fff7ed}
+  tbody td{padding:10px 12px;font-size:12px}
+  .right{text-align:right;font-variant-numeric:tabular-nums}
+  .flag{font-size:9px;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:1px 5px;color:#78350f;margin-left:6px;font-weight:600;vertical-align:middle}
+  .totals-wrap{display:flex;justify-content:flex-end;margin-bottom:24px}
+  .totals{width:300px}
+  .trow{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#555;border-bottom:1px solid #f3f4f6}
+  .trow.disc{color:#dc2626}
+  .trow.vat{color:#7c2d12;font-weight:600}
+  .trow.warn{color:#b45309;font-size:11px}
+  .trow.grand{margin-top:6px;padding-top:8px;font-size:15px;font-weight:700;color:#1a1a2e;border-top:2px solid #7c2d12;border-bottom:none}
+  .footer{background:#fff7ed;border-top:1px solid #fed7aa;padding:20px 36px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .flabel{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#7c2d12;margin-bottom:6px;font-weight:600}
+  .ftext{font-size:11px;color:#555;line-height:1.6}
+  .status-bar{background:#fef9c3;border-top:3px solid #f59e0b;padding:10px 36px;font-size:11px;color:#78350f;font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="brand-name">DESERT ROSE CATERING</div>
+      <div class="brand-sub">Desert Rose Hospitality & Catering Services LLC</div>
+      <div class="brand-detail">Al Quoz Industrial Area 3, Unit 14<br>Dubai, UAE · P.O. Box 82341<br>Tel: +971 4 347 2289 | invoices@desertrosecat.ae</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="inv-label">Invoice Number</div>
+      <div class="inv-value">INV-DRC-2025-3318</div>
+      <div style="margin-top:12px">
+        <div class="inv-label">Invoice Date</div>
+        <div class="inv-value">22 May 2025</div>
+      </div>
+      <div class="tax-badge">TAX INVOICE</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="parties">
+      <div>
+        <div class="party-label">Supplier</div>
+        <div class="party-name">Desert Rose Hospitality & Catering Services LLC</div>
+        <div class="party-detail">Al Quoz Industrial 3, Unit 14<br>Dubai, UAE</div>
+        <div class="trn-badge">TRN: 100388940000031</div>
+      </div>
+      <div>
+        <div class="party-label">Bill To</div>
+        <div class="party-name">Horizon Capital Management LLC</div>
+        <div class="party-detail">Suite 1201, Burj Daman Tower<br>DIFC, Dubai, UAE</div>
+        <div class="trn-badge">TRN: 100487230000015</div>
+      </div>
+    </div>
+
+    <div class="risk-note">
+      <strong>⚠ VAT Recoverability Note:</strong> Catering and hospitality services for staff entertainment may be subject to input VAT recovery restrictions under Art. 54(1)(c) UAE VAT Law. Recovery should be reviewed by your tax adviser before claiming.
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-item"><div class="mlabel">Event Date</div><div class="mvalue">21 May 2025</div></div>
+      <div class="meta-item"><div class="mlabel">Event Type</div><div class="mvalue">Staff Quarterly Dinner</div></div>
+      <div class="meta-item"><div class="mlabel">Attendees</div><div class="mvalue">85 Persons</div></div>
+      <div class="meta-item"><div class="mlabel">PO Reference</div><div class="mvalue">PO-HCM-0078</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th class="right">Qty</th>
+          <th class="right">Unit (AED)</th>
+          <th class="right">Amount (AED)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>3-Course Dinner Buffet (Per Person) <span class="flag">ENTERTAINMENT</span></td>
+          <td class="right">85</td>
+          <td class="right">165.00</td>
+          <td class="right">14,025.00</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Premium Beverages Package (Soft Drinks, Juices) <span class="flag">ENTERTAINMENT</span></td>
+          <td class="right">85</td>
+          <td class="right">45.00</td>
+          <td class="right">3,825.00</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Venue Setup, Decoration & Linen Service</td>
+          <td class="right">1</td>
+          <td class="right">1,800.00</td>
+          <td class="right">1,800.00</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Waitstaff Service (6 Staff × 4 Hours)</td>
+          <td class="right">24</td>
+          <td class="right">75.00</td>
+          <td class="right">1,800.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals-wrap">
+      <div class="totals">
+        <div class="trow"><span>Subtotal (excl. VAT)</span><span>AED 21,450.00</span></div>
+        <div class="trow vat"><span>VAT @ 5%</span><span>AED 1,072.50</span></div>
+        <div class="trow warn"><span>⚠ VAT on entertainment (likely blocked)</span><span>(AED 892.50)</span></div>
+        <div class="trow grand"><span>Total Amount Due</span><span>AED 22,522.50</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>
+      <div class="flabel">Payment Details</div>
+      <div class="ftext">Bank: Commercial Bank of Dubai<br>Account: Desert Rose Hospitality & Catering<br>IBAN: AE09 0230 0000 0016 3471 701<br>Payment Terms: Net 7 Days</div>
+    </div>
+    <div>
+      <div class="flabel">Important Notice</div>
+      <div class="ftext">Input VAT on entertainment, food & beverages for employees may not be recoverable per UAE VAT Executive Regulations Art. 53. Please confirm with your tax adviser. Our TRN is valid and all VAT collected will be remitted to FTA.</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    ⚠️ &nbsp;<strong>AI Risk Score: ~51/100 — MEDIUM</strong> &nbsp;·&nbsp; Entertainment/hospitality VAT recovery restriction · Staff dinner classification · VAT may be partially blocked (Art. 54) · Short 7-day payment terms → Sent to AP Review Queue
+  </div>
+</div>
+</body>
+</html>

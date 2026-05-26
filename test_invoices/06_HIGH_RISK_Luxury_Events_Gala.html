@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Tax Invoice – Opulent Events & Hospitality | INV-OEH-2025-0089</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:40px}
+  .page{max-width:800px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .header{background:linear-gradient(135deg,#1c1c2e 0%,#2d2d44 100%);color:#fff;padding:36px 40px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #c9a84c}
+  .brand-name{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;letter-spacing:0.02em;color:#c9a84c}
+  .brand-sub{font-size:10px;opacity:0.7;margin-top:4px;letter-spacing:0.12em;text-transform:uppercase}
+  .brand-detail{font-size:10.5px;opacity:0.65;margin-top:10px;line-height:1.6}
+  .invoice-meta{text-align:right}
+  .inv-label{font-size:10px;opacity:0.6;text-transform:uppercase;letter-spacing:0.08em}
+  .inv-value{font-size:14px;font-weight:600;margin-top:2px;color:#c9a84c}
+  .tax-badge{background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);border-radius:4px;padding:6px 14px;text-align:center;margin-top:10px;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#c9a84c}
+  .body{padding:32px 36px}
+  .risk-panel{background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:14px;margin-bottom:20px}
+  .risk-title{font-size:11px;font-weight:700;color:#b91c1c;margin-bottom:8px}
+  .risk-item{font-size:11px;color:#7f1d1d;margin-bottom:4px}
+  .parties{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #f0f0f0}
+  .party-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#c9a84c;font-weight:600;margin-bottom:8px}
+  .party-name{font-size:13px;font-weight:600;margin-bottom:4px}
+  .party-detail{color:#555;line-height:1.6;font-size:11px}
+  .trn-missing{display:inline-block;background:#fef2f2;border:1px solid #fca5a5;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:700;color:#b91c1c;margin-top:6px}
+  .trn-ok{display:inline-block;background:#f0fdf4;border:1px solid #86efac;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:600;color:#166534;margin-top:6px}
+  .meta-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;background:#1c1c2e0a;border:1px solid #e5e7eb;border-radius:6px;padding:14px}
+  .meta-item .mlabel{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px}
+  .meta-item .mvalue{font-size:12px;font-weight:600}
+  .verbal-note{background:#fef3c7;border-left:4px solid #f59e0b;padding:10px 14px;margin-bottom:20px;font-size:11px;color:#78350f;font-style:italic}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  thead{background:#1c1c2e;color:#c9a84c}
+  thead th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+  tbody tr{border-bottom:1px solid #f3f4f6}
+  tbody tr:nth-child(even){background:#fafaf7}
+  tbody td{padding:10px 12px;font-size:12px}
+  .right{text-align:right;font-variant-numeric:tabular-nums}
+  .flag{font-size:9px;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:1px 5px;color:#78350f;margin-left:4px;font-weight:600}
+  .totals-wrap{display:flex;justify-content:flex-end;margin-bottom:24px}
+  .totals{width:300px}
+  .trow{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#555;border-bottom:1px solid #f3f4f6}
+  .trow.vat{color:#b91c1c;font-weight:600}
+  .trow.grand{margin-top:6px;padding-top:8px;font-size:16px;font-weight:700;color:#1c1c2e;border-top:2px solid #c9a84c;border-bottom:none}
+  .footer{background:#1c1c2e08;border-top:1px solid #e5e7eb;padding:18px 36px;font-size:11px;color:#555;line-height:1.7}
+  .status-bar{background:#fee2e2;border-top:3px solid #dc2626;padding:10px 36px;font-size:11px;color:#7f1d1d;font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="brand-name">OPULENT EVENTS & HOSPITALITY</div>
+      <div class="brand-sub">Luxury Corporate Events · Dubai · Abu Dhabi</div>
+      <div class="brand-detail">The Opus by Zaha Hadid, Business Bay<br>Dubai, United Arab Emirates<br>events@opulentevents.ae · +971 50 921 4477</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="inv-label">Invoice Number</div>
+      <div class="inv-value">INV-OEH-2025-0089</div>
+      <div style="margin-top:12px">
+        <div class="inv-label">Invoice Date</div>
+        <div class="inv-value" style="color:#fff">30 May 2025</div>
+      </div>
+      <div class="tax-badge">TAX INVOICE</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="risk-panel">
+      <div class="risk-title">🚨 AI-Detected Risk Flags (Score: 79/100 — HIGH)</div>
+      <div class="risk-item">🔴 &nbsp;<strong>No VAT registration number</strong> — supplier not registered, cannot charge UAE VAT</div>
+      <div class="risk-item">🔴 &nbsp;<strong>Entertainment & hospitality</strong> — input VAT on client entertainment is <em>blocked</em> under Art. 54(1)(c)</div>
+      <div class="risk-item">🔴 &nbsp;<strong>Verbal director approval only</strong> — no written PO, contract, or approval trail for AED 134,750</div>
+      <div class="risk-item">🟡 &nbsp;<strong>Very short payment terms</strong> — 5 days on AED 134,750 is unusual for corporate event spend</div>
+    </div>
+
+    <div class="verbal-note">
+      <strong>Approval Note:</strong> "This event was approved verbally by the Managing Director on 25 May 2025. A retrospective PO will be raised by the PA. Please process urgently as the vendor has requested immediate payment post-event."
+    </div>
+
+    <div class="parties">
+      <div>
+        <div class="party-label">Supplier</div>
+        <div class="party-name">Opulent Events & Hospitality LLC</div>
+        <div class="party-detail">The Opus, Business Bay<br>Dubai, UAE</div>
+        <div class="trn-missing">⛔ TRN: NOT PROVIDED</div>
+      </div>
+      <div>
+        <div class="party-label">Bill To</div>
+        <div class="party-name">Horizon Capital Management LLC</div>
+        <div class="party-detail">Suite 1201, Burj Daman Tower<br>DIFC, Dubai, UAE</div>
+        <div class="trn-ok">TRN: 100487230000015</div>
+      </div>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-item"><div class="mlabel">Event</div><div class="mvalue">Annual Client Gala Dinner</div></div>
+      <div class="meta-item"><div class="mlabel">Event Date</div><div class="mvalue">29 May 2025</div></div>
+      <div class="meta-item"><div class="mlabel">Payment Due</div><div class="mvalue" style="color:#dc2626">04 Jun 2025 (5 days)</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th class="right">Qty</th>
+          <th class="right">Rate (AED)</th>
+          <th class="right">Amount (AED)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Private Ballroom Hire – Atlantis The Palm (6 Hours) <span class="flag">ENTERTAINMENT</span></td>
+          <td class="right">1</td>
+          <td class="right">45,000.00</td>
+          <td class="right">45,000.00</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Gala Dinner – 5-Course Menu per Head (120 Guests) <span class="flag">ENTERTAINMENT</span></td>
+          <td class="right">120</td>
+          <td class="right">380.00</td>
+          <td class="right">45,600.00</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Premium Open Bar – International Beverages <span class="flag">ENTERTAINMENT</span></td>
+          <td class="right">120</td>
+          <td class="right">220.00</td>
+          <td class="right">26,400.00</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Live Entertainment – Jazz Band (3 Hours)</td>
+          <td class="right">1</td>
+          <td class="right">8,000.00</td>
+          <td class="right">8,000.00</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Flowers, Décor, Photography & Event Coordination</td>
+          <td class="right">1</td>
+          <td class="right">3,333.33</td>
+          <td class="right">3,333.33</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals-wrap">
+      <div class="totals">
+        <div class="trow"><span>Subtotal (excl. VAT)</span><span>AED 128,333.33</span></div>
+        <div class="trow vat"><span>VAT @ 5% (⚠ Supplier unregistered)</span><span>AED 6,416.67</span></div>
+        <div class="trow grand"><span>Total Amount Due</span><span>AED 134,750.00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>⚠ BLOCKED BY GULFTAX AI:</strong> This invoice has multiple critical risk flags. (1) The supplier has no UAE VAT registration — charging VAT is illegal and input tax cannot be recovered. (2) Client entertainment VAT is fully blocked under Art. 54. (3) No written approval or PO exists for AED 134,750. This invoice requires Finance Manager sign-off with documented justification before any payment can be processed.
+  </div>
+
+  <div class="status-bar">
+    🚨 &nbsp;<strong>AI Risk Score: ~79/100 — HIGH RISK</strong> &nbsp;·&nbsp; Unregistered supplier charging VAT · All items are entertainment (Art. 54 blocked) · No PO on AED 134,750 · Verbal-only approval · 5-day pressure terms → HARD BLOCKED — Finance Manager override required
+  </div>
+</div>
+</body>
+</html>

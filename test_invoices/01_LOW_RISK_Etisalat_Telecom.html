@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Tax Invoice – e& Enterprise | INV-ET-2025-04821</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:40px}
+  .page{max-width:800px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .header{background:linear-gradient(135deg,#4f1a6e 0%,#7b2fa0 100%);color:#fff;padding:32px 36px;display:flex;justify-content:space-between;align-items:flex-start}
+  .brand{display:flex;flex-direction:column;gap:4px}
+  .brand-name{font-size:28px;font-weight:700;letter-spacing:-0.5px}
+  .brand-sub{font-size:11px;opacity:0.8;font-weight:400}
+  .invoice-meta{text-align:right}
+  .invoice-meta .label{font-size:10px;opacity:0.75;text-transform:uppercase;letter-spacing:0.08em}
+  .invoice-meta .value{font-size:14px;font-weight:600;margin-top:2px}
+  .tax-badge{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:4px;padding:6px 14px;text-align:center;margin-top:10px}
+  .tax-badge span{font-size:13px;font-weight:700;letter-spacing:0.05em}
+  .body{padding:32px 36px}
+  .parties{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid #f0f0f0}
+  .party-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#7b2fa0;font-weight:600;margin-bottom:8px}
+  .party-name{font-size:14px;font-weight:600;margin-bottom:4px}
+  .party-detail{color:#555;line-height:1.6;font-size:11px}
+  .trn-badge{display:inline-block;background:#f3e8ff;border:1px solid #d8b4fe;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:600;color:#7b2fa0;margin-top:6px}
+  .dates-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px;background:#fafafa;border-radius:6px;padding:16px}
+  .date-item .dlabel{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px}
+  .date-item .dvalue{font-size:13px;font-weight:600}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  thead{background:#4f1a6e;color:#fff}
+  thead th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+  thead th:last-child,thead th:nth-child(3),thead th:nth-child(4){text-align:right}
+  tbody tr{border-bottom:1px solid #f3f4f6}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:10px 12px;font-size:12px;color:#374151}
+  tbody td:last-child,tbody td:nth-child(3),tbody td:nth-child(4){text-align:right;font-variant-numeric:tabular-nums}
+  .totals{margin-left:auto;width:300px}
+  .total-row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#555}
+  .total-row.vat{color:#7b2fa0;font-weight:600}
+  .total-row.grand{border-top:2px solid #4f1a6e;margin-top:6px;padding-top:10px;font-size:15px;font-weight:700;color:#1a1a2e}
+  .footer{background:#faf5ff;border-top:1px solid #e9d5ff;padding:20px 36px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .foot-section .flabel{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#7b2fa0;margin-bottom:6px;font-weight:600}
+  .foot-section p{font-size:11px;color:#555;line-height:1.6}
+  .status-bar{background:#d1fae5;border-top:3px solid #10b981;padding:10px 36px;display:flex;align-items:center;gap:8px;font-size:11px;color:#065f46;font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-name">e&amp; enterprise</div>
+      <div class="brand-sub">Emirates Integrated Telecommunications Company PJSC</div>
+      <div style="font-size:11px;opacity:0.75;margin-top:8px">
+        e&amp; Tower, Media City, Dubai, UAE<br>
+        P.O. Box 3486, Dubai, United Arab Emirates<br>
+        Tel: +971 4 455 1000 | enterprise@etisalat.ae
+      </div>
+    </div>
+    <div class="invoice-meta">
+      <div class="label">Invoice Number</div>
+      <div class="value">INV-ET-2025-04821</div>
+      <div style="margin-top:14px">
+        <div class="label">Invoice Date</div>
+        <div class="value">14 April 2025</div>
+      </div>
+      <div class="tax-badge"><span>TAX INVOICE</span></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- PARTIES -->
+    <div class="parties">
+      <div>
+        <div class="party-label">Supplier</div>
+        <div class="party-name">Emirates Integrated Telecommunications Co. PJSC</div>
+        <div class="party-detail">
+          e&amp; Tower, Khalifa Park,<br>
+          Abu Dhabi, UAE<br>
+          Tel: +971 2 628 3333
+        </div>
+        <div class="trn-badge">TRN: 100239410000003</div>
+      </div>
+      <div>
+        <div class="party-label">Bill To</div>
+        <div class="party-name">Horizon Capital Management LLC</div>
+        <div class="party-detail">
+          Suite 1201, Burj Daman Tower,<br>
+          DIFC, Dubai, UAE<br>
+          accounts@horizoncapital.ae
+        </div>
+        <div class="trn-badge">TRN: 100487230000015</div>
+      </div>
+    </div>
+
+    <!-- DATES -->
+    <div class="dates-row">
+      <div class="date-item">
+        <div class="dlabel">Service Period</div>
+        <div class="dvalue">April 1–30, 2025</div>
+      </div>
+      <div class="date-item">
+        <div class="dlabel">Due Date</div>
+        <div class="dvalue">14 May 2025</div>
+      </div>
+      <div class="date-item">
+        <div class="dlabel">PO Reference</div>
+        <div class="dvalue">PO-HCM-2025-0312</div>
+      </div>
+    </div>
+
+    <!-- LINE ITEMS -->
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th style="text-align:right">Qty</th>
+          <th style="text-align:right">Unit Price (AED)</th>
+          <th style="text-align:right">Amount (AED)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Dedicated Fibre Internet (1 Gbps) – Monthly</td>
+          <td style="text-align:right">1</td>
+          <td style="text-align:right">4,200.00</td>
+          <td style="text-align:right">4,200.00</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Managed SD-WAN – Primary Link – Monthly</td>
+          <td style="text-align:right">1</td>
+          <td style="text-align:right">2,800.00</td>
+          <td style="text-align:right">2,800.00</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Business Voice Lines (x10) – Monthly</td>
+          <td style="text-align:right">10</td>
+          <td style="text-align:right">185.00</td>
+          <td style="text-align:right">1,850.00</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Cloud Backup – 2TB – Monthly</td>
+          <td style="text-align:right">1</td>
+          <td style="text-align:right">950.00</td>
+          <td style="text-align:right">950.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- TOTALS -->
+    <div class="totals">
+      <div class="total-row"><span>Subtotal (excl. VAT)</span><span>AED 9,800.00</span></div>
+      <div class="total-row"><span>Discount</span><span>AED 0.00</span></div>
+      <div class="total-row vat"><span>VAT @ 5%</span><span>AED 490.00</span></div>
+      <div class="total-row grand"><span>Total Amount Due</span><span>AED 10,290.00</span></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="foot-section">
+      <div class="flabel">Payment Details</div>
+      <p>Bank: Emirates NBD<br>
+      Account Name: e&amp; Enterprise LLC<br>
+      IBAN: AE07 0260 0010 2645 2130 201<br>
+      Payment Terms: Net 30 Days</p>
+    </div>
+    <div class="foot-section">
+      <div class="flabel">Notes</div>
+      <p>This is a computer-generated tax invoice. No signature required.<br>
+      For queries: enterprise-billing@etisalat.ae<br>
+      This invoice is subject to UAE VAT Law Federal Decree-Law No. 8 of 2017.</p>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    ✓ &nbsp;<strong>AI Risk Score: ~12/100 — CLEAR</strong> &nbsp;·&nbsp; Known recurring vendor · Valid TRN · Exact VAT maths · PO matched · 30-day terms → Auto-approved into VAT Classifier
+  </div>
+</div>
+</body>
+</html>

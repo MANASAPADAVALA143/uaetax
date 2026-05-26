@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Tax Invoice – Al Fajr General Trading | INV-AFT-2025-0412</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#1a1a2e;background:#fff;padding:40px}
+  .page{max-width:800px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .urgent-banner{background:#dc2626;color:#fff;padding:10px 36px;text-align:center;font-size:12px;font-weight:700;letter-spacing:0.1em}
+  .header{background:linear-gradient(135deg,#374151 0%,#4b5563 100%);color:#fff;padding:28px 36px;display:flex;justify-content:space-between;align-items:flex-start}
+  .brand-name{font-size:22px;font-weight:700}
+  .brand-sub{font-size:10.5px;opacity:0.75;margin-top:3px}
+  .brand-detail{font-size:10.5px;opacity:0.65;margin-top:8px;line-height:1.6}
+  .no-trn{display:inline-block;background:rgba(220,38,38,0.25);border:1px solid rgba(220,38,38,0.5);border-radius:3px;padding:2px 8px;font-size:10px;font-weight:700;color:#fca5a5;margin-top:6px}
+  .invoice-meta{text-align:right}
+  .inv-label{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.06em}
+  .inv-value{font-size:14px;font-weight:600;margin-top:2px}
+  .tax-badge{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);border-radius:4px;padding:6px 14px;text-align:center;margin-top:10px;font-size:13px;font-weight:700;letter-spacing:0.05em}
+  .body{padding:28px 36px}
+  .risk-flags{background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:14px;margin-bottom:20px}
+  .risk-flags-title{font-size:11px;font-weight:700;color:#b91c1c;margin-bottom:8px}
+  .risk-flag-item{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:#7f1d1d;margin-bottom:4px}
+  .parties{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #f0f0f0}
+  .party-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;font-weight:600;margin-bottom:8px}
+  .party-name{font-size:13px;font-weight:600;margin-bottom:4px}
+  .party-detail{color:#555;line-height:1.6;font-size:11px}
+  .trn-missing{display:inline-block;background:#fef2f2;border:1px solid #fca5a5;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:700;color:#b91c1c;margin-top:6px}
+  .trn-ok{display:inline-block;background:#f0fdf4;border:1px solid #86efac;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:600;color:#166534;margin-top:6px}
+  .meta-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;background:#f9fafb;border-radius:6px;padding:12px}
+  .meta-item .mlabel{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px}
+  .meta-item .mvalue{font-size:12px;font-weight:600}
+  .mvalue.red{color:#dc2626}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px}
+  thead{background:#374151;color:#fff}
+  thead th{padding:9px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+  tbody tr{border-bottom:1px solid #f3f4f6}
+  tbody td{padding:9px 12px;font-size:12px}
+  .right{text-align:right;font-variant-numeric:tabular-nums}
+  .totals-wrap{display:flex;justify-content:flex-end;margin-bottom:20px}
+  .totals{width:280px}
+  .trow{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#555;border-bottom:1px solid #f3f4f6}
+  .trow.vat{color:#374151;font-weight:600}
+  .trow.grand{margin-top:6px;padding-top:8px;font-size:15px;font-weight:700;color:#1a1a2e;border-top:2px solid #374151;border-bottom:none}
+  .urgency-box{background:#fef2f2;border:2px solid #dc2626;border-radius:6px;padding:14px;margin-bottom:20px;font-size:11px;color:#7f1d1d;font-style:italic}
+  .urgency-title{font-weight:700;font-style:normal;color:#b91c1c;margin-bottom:4px;font-size:12px}
+  .footer{background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 36px;font-size:11px;color:#555}
+  .status-bar{background:#fee2e2;border-top:3px solid #dc2626;padding:10px 36px;font-size:11px;color:#7f1d1d;font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="urgent-banner">⚠ URGENT PAYMENT REQUIRED — PLEASE PROCESS IMMEDIATELY ⚠</div>
+
+  <div class="header">
+    <div>
+      <div class="brand-name">AL FAJR GENERAL TRADING</div>
+      <div class="brand-sub">Al Fajr General Trading Company LLC</div>
+      <div class="brand-detail">Shop 14, Al Ras Market<br>Deira, Dubai, UAE<br>Tel: +971 55 847 3921 | alfajrtrade@gmail.com</div>
+      <div class="no-trn">TRN: NOT REGISTERED</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="inv-label">Invoice Number</div>
+      <div class="inv-value">INV-AFT-2025-0412</div>
+      <div style="margin-top:12px">
+        <div class="inv-label">Invoice Date</div>
+        <div class="inv-value">28 May 2025</div>
+      </div>
+      <div class="tax-badge">TAX INVOICE</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="risk-flags">
+      <div class="risk-flags-title">🚨 AI-Detected Risk Flags</div>
+      <div class="risk-flag-item">🔴 &nbsp;<strong>Supplier TRN not registered</strong> — charging VAT illegally (FTA Art. 40). Input tax not recoverable.</div>
+      <div class="risk-flag-item">🔴 &nbsp;<strong>Duplicate invoice number</strong> — INV-AFT-2025-0412 matches a prior submission (18 Apr 2025) for same amount.</div>
+      <div class="risk-flag-item">🔴 &nbsp;<strong>Urgency pressure</strong> — "Pay within 2 days or penalty applies" — common fraud indicator.</div>
+      <div class="risk-flag-item">🟡 &nbsp;<strong>Gmail email address</strong> — not professional domain, inconsistent with AED 78,500 transaction value.</div>
+      <div class="risk-flag-item">🟡 &nbsp;<strong>Round number amount</strong> — AED 75,000 net is an exact round figure, unusual for bulk supply invoice.</div>
+    </div>
+
+    <div class="urgency-box">
+      <div class="urgency-title">URGENT NOTICE FROM SUPPLIER:</div>
+      "Dear Accounts Team — Please process this payment IMMEDIATELY. Our director has confirmed this order verbally with your CEO. Payment must be received within 2 DAYS or we will apply a 15% late penalty and cancel the contract. Do not delay — this is time-sensitive."
+    </div>
+
+    <div class="parties">
+      <div>
+        <div class="party-label">Supplier</div>
+        <div class="party-name">Al Fajr General Trading Company LLC</div>
+        <div class="party-detail">Shop 14, Al Ras Market<br>Deira, Dubai, UAE</div>
+        <div class="trn-missing">⛔ TRN: NOT REGISTERED — VAT INVALID</div>
+      </div>
+      <div>
+        <div class="party-label">Bill To</div>
+        <div class="party-name">Horizon Capital Management LLC</div>
+        <div class="party-detail">Suite 1201, Burj Daman Tower<br>DIFC, Dubai, UAE</div>
+        <div class="trn-ok">TRN: 100487230000015</div>
+      </div>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-item"><div class="mlabel">Invoice Date</div><div class="mvalue">28 May 2025</div></div>
+      <div class="meta-item"><div class="mlabel">Payment Terms</div><div class="mvalue red">2 DAYS — URGENT</div></div>
+      <div class="meta-item"><div class="mlabel">PO Reference</div><div class="mvalue red">NONE — VERBAL ONLY</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th class="right">Qty</th>
+          <th class="right">Unit Price (AED)</th>
+          <th class="right">Amount (AED)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Office Furniture & Equipment – Bulk Supply (Various Items)</td>
+          <td class="right">1</td>
+          <td class="right">35,000.00</td>
+          <td class="right">35,000.00</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>IT Hardware – Laptops, Monitors, Accessories (Per Agreement)</td>
+          <td class="right">1</td>
+          <td class="right">25,000.00</td>
+          <td class="right">25,000.00</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Installation & Delivery (Lump Sum)</td>
+          <td class="right">1</td>
+          <td class="right">15,000.00</td>
+          <td class="right">15,000.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals-wrap">
+      <div class="totals">
+        <div class="trow"><span>Subtotal (excl. VAT)</span><span>AED 75,000.00</span></div>
+        <div class="trow vat"><span>VAT @ 5% (⚠ Invalid — not registered)</span><span>AED 3,750.00</span></div>
+        <div class="trow grand"><span>Total Amount Due</span><span>AED 78,750.00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>IMPORTANT:</strong> This invoice has been flagged by GulfTax AI and escalated for Finance Manager review. Do NOT process payment until Finance Manager has reviewed and overridden with a documented reason. Paying VAT to an unregistered supplier violates Art. 40 UAE VAT Law and this input tax cannot be recovered.
+  </div>
+
+  <div class="status-bar">
+    🚨 &nbsp;<strong>AI Risk Score: ~87/100 — HIGH RISK</strong> &nbsp;·&nbsp; Unregistered TRN (VAT illegal) · Duplicate invoice · Urgency pressure tactic · Gmail address · Round number · No PO → HARD BLOCKED — Finance Manager override required
+  </div>
+</div>
+</body>
+</html>

@@ -8,8 +8,15 @@ import Link from "next/link";
 
 interface RiskFlag {
   flag: string;
+  flag_id?: number;
   severity: "high" | "medium" | "low";
-  message: string;
+  message?: string;
+  title?: string;
+  what_is_wrong?: string;
+  action_required?: string;
+  uae_law_reference?: string;
+  vat_at_risk_aed?: number;
+  category?: string;
 }
 
 interface InvoiceRow {
@@ -285,14 +292,76 @@ export default function ReviewQueuePage() {
                 <div><span className="text-muted2 block">AI Confidence</span><span className="text-white">{inv.confidence ? `${(inv.confidence * 100).toFixed(0)}%` : "—"}</span></div>
               </div>
 
+              {/* WHY AI FLAGGED THIS — full decision summary */}
               {inv.risk_flags.length > 0 && (
-                <div className="space-y-1.5 mb-4">
-                  {inv.risk_flags.map((rf, j) => (
-                    <div key={j} className={`flex items-start gap-2 rounded-[8px] border px-3 py-2 text-[12px] ${SEVERITY_COLORS[rf.severity]}`}>
-                      <span className="font-mono uppercase text-[10px] mt-0.5 flex-shrink-0">{rf.severity}</span>
-                      <span>{rf.message}</span>
+                <div className="mb-4 rounded-[10px] border border-border bg-[rgba(4,12,30,0.6)] overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[rgba(255,255,255,0.03)]">
+                    <span className="text-[10px] font-mono text-gold uppercase tracking-[0.1em]">// AI Decision Summary</span>
+                    <span className="ml-auto text-[10px] text-muted2">{inv.risk_flags.length} flag{inv.risk_flags.length !== 1 ? "s" : ""} detected</span>
+                  </div>
+
+                  {/* Passed checks */}
+                  <div className="px-4 py-2 border-b border-border space-y-1">
+                    {[
+                      inv.vendor_trn ? `TRN ${inv.vendor_trn} format verified` : null,
+                      inv.vat_treatment ? `VAT treatment classified: ${inv.vat_treatment.replace(/_/g, " ")}` : null,
+                      inv.invoice_number ? `Invoice number extracted: ${inv.invoice_number}` : null,
+                    ].filter(Boolean).map((check, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px] text-green/80">
+                        <span className="flex-shrink-0">✓</span>
+                        <span>{check}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Flags */}
+                  <div className="divide-y divide-border">
+                    {inv.risk_flags.map((rf, j) => (
+                      <div key={j} className="px-4 py-3">
+                        <div className="flex items-start gap-2 mb-1.5">
+                          <span className={`flex-shrink-0 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${SEVERITY_COLORS[rf.severity]}`}>
+                            {rf.severity}
+                          </span>
+                          <span className="text-[12px] font-medium text-white leading-tight">
+                            {rf.title || rf.message || rf.flag}
+                          </span>
+                        </div>
+                        {rf.what_is_wrong && (
+                          <p className="text-[11px] text-muted leading-relaxed ml-0 mb-1.5">{rf.what_is_wrong}</p>
+                        )}
+                        {rf.action_required && (
+                          <div className="flex items-start gap-1.5 text-[10.5px] text-amber/90 mb-1">
+                            <span className="flex-shrink-0 mt-0.5">→</span>
+                            <span>{rf.action_required}</span>
+                          </div>
+                        )}
+                        {rf.uae_law_reference && (
+                          <div className="text-[10px] text-muted2 font-mono">
+                            📋 {rf.uae_law_reference}
+                          </div>
+                        )}
+                        {rf.vat_at_risk_aed && rf.vat_at_risk_aed > 0 && (
+                          <div className="mt-1 text-[10px] text-red/80 font-mono">
+                            VAT at risk: AED {rf.vat_at_risk_aed.toLocaleString("en-AE", { minimumFractionDigits: 2 })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Risk score bar */}
+                  <div className="px-4 py-2.5 border-t border-border bg-[rgba(255,255,255,0.02)] flex items-center gap-3">
+                    <span className="text-[10px] text-muted2 uppercase tracking-wide">Overall Risk</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${inv.overall_risk === "high" ? "bg-red w-[85%]" : inv.overall_risk === "medium" ? "bg-amber w-[50%]" : "bg-green w-[20%]"}`}
+                      />
                     </div>
-                  ))}
+                    <span className={`text-[11px] font-mono font-bold uppercase ${inv.overall_risk === "high" ? "text-red" : inv.overall_risk === "medium" ? "text-amber" : "text-green"}`}>
+                      {inv.overall_risk}
+                    </span>
+                  </div>
                 </div>
               )}
 

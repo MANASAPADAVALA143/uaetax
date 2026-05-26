@@ -237,6 +237,26 @@ def run_all_anomaly_checks(
                 vat_at_risk_aed=round(total * 0.05, 2),
             ))
 
+    # ANOMALY 1b — Same invoice number anywhere in DB (cross-vendor catch)
+    if inv_no:
+        dup_any = db.query(Invoice).filter(
+            and_(
+                Invoice.company_id == company_id,
+                Invoice.invoice_number == inv_no,
+                Invoice.id != invoice_id,
+            )
+        ).first()
+        if dup_any and not (vendor and dup_any.vendor_name == vendor and dup_any.total_aed == total):
+            flags.append(AnomalyFlag(
+                flag_id=1, flag="duplicate_invoice_number", category="duplicate",
+                severity="HIGH",
+                title="Duplicate Invoice Number — Already in System",
+                what_is_wrong=f"Invoice number '{inv_no}' already exists in this company's records (Invoice ID {dup_any.id}, vendor: {dup_any.vendor_name or 'unknown'}, dated {str(dup_any.invoice_date or 'unknown')[:10]}). Duplicate invoice numbers are a primary fraud indicator.",
+                action_required="Hard hold — verify with supplier whether this is a resubmission of a previously paid invoice. Cross-check payment records before processing.",
+                uae_law_reference="Article 59, UAE VAT Law — duplicate VAT claims attract 300% penalty; FTA Audit Guide § duplicate detection",
+                vat_at_risk_aed=round(vat_shown, 2),
+            ))
+
     # ANOMALY 2 — Near duplicate (cosine similarity)
     if vendor and desc_all:
         recent_invs = db.query(Invoice).filter(
@@ -559,7 +579,7 @@ def run_all_anomaly_checks(
             severity="HIGH",
             title="Entertainment Expense — Input VAT is BLOCKED",
             what_is_wrong=f"Invoice appears to be for entertainment/meals/hospitality (AED {vat_shown:,.2f} VAT claimed). UAE VAT law explicitly blocks input tax recovery on entertainment expenses.",
-            action_required="Remove VAT amount AED {vat_shown:,.2f} from VAT return Box 9. Post full amount (inc. VAT) as expense to P&L.",
+            action_required=f"Remove VAT amount AED {vat_shown:,.2f} from VAT return Box 9. Post full amount (inc. VAT) as expense to P&L.",
             uae_law_reference="Article 53(1)(b), UAE VAT Law — blocked input tax on entertainment and meals",
             vat_at_risk_aed=round(vat_shown, 2),
         ))
@@ -575,6 +595,55 @@ def run_all_anomaly_checks(
             action_required="Verify supplier's VAT registration status. If QFZP qualified, different rules apply. Consult VAT specialist.",
             uae_law_reference="Cabinet Decision 55/2017 — Free Zone VAT treatment; Article 51, UAE VAT Law",
             vat_at_risk_aed=round(subtotal * 0.05, 2),
+        ))
+
+    # ANOMALY 20a — Free email address on high-value invoice (gmail/yahoo/hotmail)
+    _supplier_email = (extracted.vendor_address or "").lower()
+    _free_email_domains = ["@gmail.com", "@yahoo.com", "@hotmail.com", "@outlook.com", "@live.com", "@icloud.com"]
+    _has_free_email = any(d in _supplier_email for d in _free_email_domains)
+    if _has_free_email and total > 10_000:
+        flags.append(AnomalyFlag(
+            flag_id=20, flag="free_email_supplier", category="fraud",
+            severity="MEDIUM",
+            title="Supplier Using Free Email Address on High-Value Invoice",
+            what_is_wrong=f"Supplier contact email is a free consumer address (Gmail/Yahoo/Hotmail) on an AED {total:,.2f} invoice. Legitimate businesses of this size use professional domain emails. This is a common invoice fraud indicator.",
+            action_required="Verify supplier identity independently. Call a known number from the company website — not any number printed on this invoice. Confirm bank details via separate channel.",
+            uae_law_reference="UAE AML Law No. 20 of 2018 — enhanced due diligence on suspicious counterparties; FTA Audit Guide — supplier identity verification",
+            vat_at_risk_aed=round(vat_shown, 2),
+        ))
+
+    # ANOMALY 20b — DMCC/Free zone supplier detected from name/address (stronger check)
+    _fz_keywords = ["dmcc", "jafza", "difc", "dso", "adgm", "jlt", "rakez", "saif zone", "freezone", "free zone", "kizad", "twofour54"]
+    _vendor_name_low = (vendor or "").lower()
+    _vendor_combined = _vendor_name_low + " " + vendor_addr_low
+    _is_named_freezone = any(fz in _vendor_combined for fz in _fz_keywords)
+    if _is_named_freezone and not is_free_zone:  # catch if missed by address check
+        flags.append(AnomalyFlag(
+            flag_id=21, flag="free_zone_supplier_name", category="uae_specific",
+            severity="MEDIUM",
+            title="Free Zone Entity Detected — Verify VAT Treatment",
+            what_is_wrong=f"Supplier name/address indicates a UAE Free Zone entity. Supplies from a Qualifying Free Zone Person (QFZP) to mainland UAE may require reverse charge or may be treated as imports — standard 5% input VAT may not apply.",
+            action_required="Confirm if supplier is a QFZP under Cabinet Decision 55/2017. If yes, reverse charge applies. Request supplier's VAT registration certificate and confirm treatment in writing.",
+            uae_law_reference="Cabinet Decision 55/2017 — Qualifying Free Zone Persons; Article 51, UAE VAT Law — Designated Zones",
+            vat_at_risk_aed=round(subtotal * 0.05, 2),
+        ))
+
+    # ANOMALY 20c — Travel/reimbursement line item detected
+    _travel_keywords = ["travel", "accommodation", "hotel", "reimbursement", "flight", "airline", "per diem", "subsistence", "lodging"]
+    _line_descs_low = " ".join(
+        (li.get("description", "") or "").lower()
+        for li in (extracted.line_items or [])
+    )
+    _has_travel_line = any(kw in _line_descs_low for kw in _travel_keywords)
+    if _has_travel_line:
+        flags.append(AnomalyFlag(
+            flag_id=22, flag="travel_reimbursement_line", category="uae_specific",
+            severity="LOW",
+            title="Travel / Reimbursement Line Item — VAT Recoverability Unclear",
+            what_is_wrong="Invoice includes a travel, accommodation, or reimbursement line item. Input VAT on these expenses is only recoverable if the supplier acted as a disclosed agent and the original VAT receipt is held by your company, not the supplier.",
+            action_required="Request original hotel/airline receipts. Confirm agency arrangement in writing. Do not claim VAT on reimbursed costs unless you hold the original tax invoice in your company's name.",
+            uae_law_reference="Article 54(1)(d), UAE VAT Law — reimbursed expenses; FTA VAT Guide on disbursements vs reimbursements",
+            vat_at_risk_aed=round(vat_shown * 0.3, 2),  # conservative: only travel portion
         ))
 
     # ANOMALY 20 — Currency not AED
