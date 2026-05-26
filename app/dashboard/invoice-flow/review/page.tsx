@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -74,7 +74,7 @@ const STATUS_BADGE: Record<string, string> = {
 
 const STATUS_TABS = ["all", "pending", "review", "approved", "auto_approved", "escalated", "posted"];
 
-export default function ReviewQueuePage() {
+function ReviewQueueInner() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
@@ -565,5 +565,13 @@ export default function ReviewQueuePage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function ReviewQueuePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-muted2 text-sm">Loading review queue…</div>}>
+      <ReviewQueueInner />
+    </Suspense>
   );
 }
