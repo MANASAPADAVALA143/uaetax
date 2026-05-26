@@ -63,26 +63,34 @@ app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
 app.include_router(invoice_flow.router)  # prefix="/api/invoice" defined in router
 app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
 
-# CORS — allow production frontend + local dev
-# Authorization and X-Company-ID must be in allow_headers for auth to work
-_default_origins = (
-    "https://uaetax-production.up.railway.app,"
-    "https://uaetax.vercel.app,"
-    "https://uaetax-manasapadavala143.vercel.app,"
-    "https://gulftax.vercel.app,"
-    "http://localhost:3000,"
-    "http://localhost:3001,"
-    "http://127.0.0.1:3000,"
-    "http://127.0.0.1:3001"
-)
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+# CORS — hardcoded origins + regex fallback for any *.vercel.app deployment
+# No env-var override so Railway can never accidentally break this
+ALLOWED_ORIGINS = [
+    "https://uaetax.vercel.app",
+    "https://uaetax-manasapadavala143.vercel.app",
+    "https://gulftax.vercel.app",
+    "https://uaetax-production.up.railway.app",
+    "https://uaetax-production-9b22.up.railway.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+]
+
+# Also accept any extra origins from env var (additive, not replacing)
+_extra = os.getenv("ALLOWED_ORIGINS", "")
+for _o in _extra.split(","):
+    _o = _o.strip()
+    if _o and _o not in ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS.append(_o)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["Authorization", "X-Company-ID", "Content-Type", "X-N8N-Signature", "Accept", "*"],
+    allow_headers=["*"],
 )
 
 
