@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { apiClient } from "@/lib/api";
 
 const STORAGE_SETTINGS = "gulftax_company_settings";
 
@@ -47,6 +48,8 @@ export default function SettingsPage() {
   const [trn, setTrn] = useState(defaults.trn);
   const [entityType, setEntityType] = useState<EntityType>(defaults.entityType);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
 
   // Seed from AuthContext once loaded
   useEffect(() => {
@@ -61,6 +64,21 @@ export default function SettingsPage() {
     setTrn(s.trn);
     setEntityType(s.entityType);
   }, [activeCompany]);
+
+  const handleDemoReset = async () => {
+    if (!window.confirm("Delete ALL invoices and transactions for this company? This cannot be undone.")) return;
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      const { data } = await apiClient.delete("/api/invoice/demo/reset");
+      setResetMsg(`✅ Reset complete — ${data.deleted_invoices} invoices and ${data.deleted_transactions} transactions deleted.`);
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setResetMsg(`❌ Reset failed: ${detail || "Unknown error"}`);
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleSave = () => {
     const payload: CompanySettings = { companyName, trn, entityType };
@@ -131,6 +149,27 @@ export default function SettingsPage() {
           </button>
           {savedFlash && <span className="text-sm text-green">Saved locally</span>}
         </div>
+      </div>
+
+      {/* Demo reset */}
+      <div className="bg-gradient-to-br from-card to-[#071228] border border-red/20 rounded-2xl p-6 mb-6 max-w-xl">
+        <h3 className="text-sm font-semibold text-white mb-1">Demo Reset</h3>
+        <p className="text-[13px] text-muted2 mb-4">
+          Clear all invoices and transactions for a clean demo. Use before LinkedIn or client presentations.
+        </p>
+        <button
+          type="button"
+          onClick={handleDemoReset}
+          disabled={resetting}
+          className="px-5 py-2.5 rounded-[10px] text-sm font-medium border border-red/40 text-red hover:bg-[rgba(255,107,107,0.1)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          {resetting ? "Resetting…" : "🗑 Reset Demo Data"}
+        </button>
+        {resetMsg && (
+          <p className={`mt-3 text-[13px] ${resetMsg.startsWith("✅") ? "text-green" : "text-red"}`}>
+            {resetMsg}
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 max-w-3xl">

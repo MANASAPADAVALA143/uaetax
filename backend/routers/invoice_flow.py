@@ -420,7 +420,7 @@ def run_all_anomaly_checks(
             severity="HIGH",
             title="Reverse Charge May Apply — Foreign Supplier",
             what_is_wrong=f"Supplier appears to be outside UAE (address: {extracted.vendor_address or 'not shown'}) with no UAE TRN. Recipient must self-account for VAT under reverse charge mechanism.",
-            action_required="Apply reverse charge: account for output VAT (Box 6) and claim input VAT (Box 9) in VAT return. Do not pay supplier VAT.",
+            action_required="Apply reverse charge: account for output VAT (Box 2) and claim input VAT (Box 7) in VAT return. Do not pay supplier VAT.",
             uae_law_reference="Article 48, UAE VAT Law — imported services reverse charge mechanism",
             vat_at_risk_aed=round(subtotal * 0.05, 2),
         ))
@@ -602,7 +602,7 @@ def run_all_anomaly_checks(
             severity="HIGH",
             title="Entertainment Expense — Input VAT is BLOCKED",
             what_is_wrong=f"Invoice appears to be for entertainment/meals/hospitality (AED {vat_shown:,.2f} VAT claimed). UAE VAT law explicitly blocks input tax recovery on entertainment expenses.",
-            action_required=f"Remove VAT amount AED {vat_shown:,.2f} from VAT return Box 9. Post full amount (inc. VAT) as expense to P&L.",
+            action_required=f"Remove VAT amount AED {vat_shown:,.2f} from VAT return Box 7 (input VAT). Post the full amount including VAT as an expense to P&L — it is not reclaimable.",
             uae_law_reference="Article 53(1)(b), UAE VAT Law — blocked input tax on entertainment and meals",
             vat_at_risk_aed=round(vat_shown, 2),
         ))
@@ -1301,4 +1301,44 @@ def supplier_profile(
             "last_seen": invoices[-1].created_at.isoformat() if invoices else None,
             "price_trend": _mann_kendall_trend(amounts) if len(amounts) >= 3 else None,
         },
+    }
+
+
+# ── Demo reset ─────────────────────────────────────────────────────────────────
+
+@router.delete("/demo/reset")
+def demo_reset(
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """
+    Hard-delete ALL invoices AND transactions for this company.
+    Designed for LinkedIn demo prep so the presenter can start fresh
+    without leaving stale data from previous runs.
+    """
+    from models import AuditLog
+
+    deleted_invoices = (
+        db.query(Invoice)
+        .filter(Invoice.company_id == company_id)
+        .delete(synchronize_session=False)
+    )
+    deleted_txns = (
+        db.query(Transaction)
+        .filter(Transaction.company_id == company_id)
+        .delete(synchronize_session=False)
+    )
+    db.add(
+        AuditLog(
+            company_id=company_id,
+            actor="demo_reset",
+            action="demo_reset",
+            entity=f"{deleted_invoices} invoices + {deleted_txns} transactions deleted",
+        )
+    )
+    db.commit()
+    return {
+        "message": "Demo data cleared successfully",
+        "deleted_invoices": deleted_invoices,
+        "deleted_transactions": deleted_txns,
     }
