@@ -69,6 +69,7 @@ export default function InvoiceFlowPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const processingRef = useRef(false); // prevents double-submit race condition
 
   const addFiles = (incoming: FileList | null) => {
     if (!incoming) return;
@@ -85,6 +86,9 @@ export default function InvoiceFlowPage() {
 
   const handleProcess = async () => {
     if (!files.length) return;
+    // Prevent double-submission (ref is synchronous, unlike state)
+    if (processingRef.current) return;
+    processingRef.current = true;
     setStage("uploading");
     setErrorMsg(null);
     setResults([]);
@@ -144,6 +148,7 @@ export default function InvoiceFlowPage() {
 
     setResults(processed);
     setStage("done");
+    processingRef.current = false;
   };
 
   const STAGES = ["uploading", "extracting", "classifying", "done"];

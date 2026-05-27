@@ -89,6 +89,20 @@ def _transaction_side(t: Transaction) -> str:
     return (getattr(t, "transaction_type", None) or "sale").lower()
 
 
+_ENTERTAINMENT_KWS = {
+    "restaurant", "hotel", "entertainment", "meals", "leisure", "recreation",
+    "hospitality", "catering", "food", "beverage", "drinks", "cafe", "dinner",
+    "lunch", "breakfast", "nobu", "four seasons", "hilton", "hyatt", "marriott",
+    "gala", "buffet",
+}
+
+
+def _is_entertainment(t: Transaction) -> bool:
+    """Art.53(1)(b): input VAT on entertainment/meals is not recoverable."""
+    desc = (t.description or "").lower()
+    return any(kw in desc for kw in _ENTERTAINMENT_KWS)
+
+
 def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, float]:
     """
     Calculate all 8 FTA VAT return boxes from transactions.
@@ -113,10 +127,14 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     sales_ex   = [t for t in transactions if _transaction_side(t) == "sale"
                   and (t.vat_treatment or "") == "exempt"]
 
-    purch_std  = [t for t in transactions if _transaction_side(t) == "purchase"
-                  and (t.vat_treatment or "") == "standard_rated"]
-    purch_rc   = [t for t in transactions if _transaction_side(t) == "purchase"
-                  and (t.vat_treatment or "") == "reverse_charge"]
+    _purch_std_all = [t for t in transactions if _transaction_side(t) == "purchase"
+                      and (t.vat_treatment or "") == "standard_rated"]
+    purch_rc       = [t for t in transactions if _transaction_side(t) == "purchase"
+                      and (t.vat_treatment or "") == "reverse_charge"]
+
+    # Art.53(1)(b): split standard-rated purchases into claimable vs blocked
+    purch_std_entertainment = [t for t in _purch_std_all if _is_entertainment(t)]
+    purch_std               = [t for t in _purch_std_all if not _is_entertainment(t)]
 
     def _amt(lst):  return sum(t.amount_aed or 0 for t in lst)
 
@@ -134,13 +152,17 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     box2 = box1 * 0.05 + rc_vat
 
     # ── Boxes 6-7: Expense side ──────────────────────────────────────────────
-    std_net = _amt(purch_std)
+    # Entertainment excluded from both boxes per Art.53(1)(b)
+    std_net = _amt(purch_std)                  # claimable only
     std_vat = std_net * 0.05
 
-    # Box 6: Taxable expenses (standard-rated + reverse-charge purchases net)
+    entertainment_net = _amt(purch_std_entertainment)
+    entertainment_vat = entertainment_net * 0.05
+
+    # Box 6: Taxable expenses (standard-rated claimable + reverse-charge net)
     box6 = std_net + rc_net
 
-    # Box 7: Input VAT = std purchase VAT + RC self-assessed input VAT (Art. 48)
+    # Box 7: Input VAT = std claimable VAT + RC self-assessed input VAT (Art. 48)
     box7 = std_vat + rc_vat
 
     # Box 8: Net VAT payable (+) or refundable (-)
@@ -156,9 +178,11 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
         "box7_vat_on_expenses":         round(box7, 2),
         "box8_vat_payable_or_refundable": round(box8, 2),
         # Extra metadata for UI tooltips
-        "_rc_net_aed":  round(rc_net, 2),
-        "_rc_vat_aed":  round(rc_vat, 2),
-        "_std_net_aed": round(std_net, 2),
+        "_rc_net_aed":               round(rc_net, 2),
+        "_rc_vat_aed":               round(rc_vat, 2),
+        "_std_net_aed":              round(std_net, 2),
+        "_entertainment_blocked_net_aed": round(entertainment_net, 2),
+        "_entertainment_blocked_vat_aed": round(entertainment_vat, 2),
     }
 
 

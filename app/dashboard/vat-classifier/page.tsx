@@ -81,6 +81,8 @@ export default function VATClassifier() {
       setError("Please select a file first");
       return;
     }
+    // Guard against double-submit (state update may not be synchronous)
+    if (isUploading) return;
 
     setIsUploading(true);
     setError(null);

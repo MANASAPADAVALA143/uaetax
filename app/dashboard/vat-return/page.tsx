@@ -57,6 +57,11 @@ interface RCMeta {
   rc_vat_aed: number;
 }
 
+interface EntertainmentMeta {
+  blocked_net_aed: number;
+  blocked_vat_aed: number;
+}
+
 const ZERO_BOXES: BoxState = {
   box1_standard_rated_supplies: 0,
   box2_vat_on_supplies: 0,
@@ -101,6 +106,7 @@ export default function VATReturnPage() {
   const [downloading, setDownloading] = useState<"pdf" | "excel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rcMeta, setRcMeta] = useState<RCMeta | null>(null);
+  const [entertainmentMeta, setEntertainmentMeta] = useState<EntertainmentMeta | null>(null);
 
   const period = useMemo(() => quarterToRange(quarter, year), [quarter, year]);
 
@@ -126,6 +132,9 @@ export default function VATReturnPage() {
       const rcNet = Number(data._rc_net_aed) || 0;
       const rcVat = Number(data._rc_vat_aed) || 0;
       setRcMeta(rcNet > 0 ? { rc_net_aed: rcNet, rc_vat_aed: rcVat } : null);
+      const entNet = Number(data._entertainment_blocked_net_aed) || 0;
+      const entVat = Number(data._entertainment_blocked_vat_aed) || 0;
+      setEntertainmentMeta(entNet > 0 ? { blocked_net_aed: entNet, blocked_vat_aed: entVat } : null);
       const id = Number(data.return_id);
       setReturnId(id);
       setStatus(data.status || "draft");
@@ -292,9 +301,19 @@ export default function VATReturnPage() {
                 Incl. {fmtAed(rcMeta.rc_net_aed)} reverse charge expenses (self-assessed, Art. 48)
               </div>
             )}
+            {b.n === 6 && entertainmentMeta && entertainmentMeta.blocked_net_aed > 0 && (
+              <div className="text-[10px] text-amber/70 font-mono mt-0.5">
+                Excl. {fmtAed(entertainmentMeta.blocked_net_aed)} entertainment (Art. 53 — input VAT blocked)
+              </div>
+            )}
             {b.n === 7 && rcMeta && rcMeta.rc_vat_aed > 0 && (
               <div className="text-[10px] text-purple-300/70 font-mono mt-0.5">
                 Incl. {fmtAed(rcMeta.rc_vat_aed)} reverse charge input VAT (Art. 48)
+              </div>
+            )}
+            {b.n === 7 && entertainmentMeta && entertainmentMeta.blocked_vat_aed > 0 && (
+              <div className="text-[10px] text-amber/70 font-mono mt-0.5">
+                Excl. {fmtAed(entertainmentMeta.blocked_vat_aed)} blocked VAT on entertainment (Art. 53)
               </div>
             )}
           </div>
