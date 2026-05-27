@@ -54,6 +54,7 @@ EXTRACT_PROMPT = """Extract ALL fields from this UAE VAT invoice and return JSON
   "vendor_name": "",
   "vendor_address": "",
   "vendor_trn": "",
+  "contact_email": null,
   "invoice_number": "",
   "invoice_date": "YYYY-MM-DD",
   "customer_name": "",
@@ -74,7 +75,8 @@ EXTRACT_PROMPT = """Extract ALL fields from this UAE VAT invoice and return JSON
 Rules:
 - payment_terms_days: parse to integer number of days. Examples: "30 days"→30, "2 DAYS URGENT"→2, "Net 15"→15, "Immediate"→0, "COD"→0. If not found leave null.
 - invoice_date: always YYYY-MM-DD, strip any weekday text e.g. "16 May 2025 (Friday)"→"2025-05-16"
-- po_reference: if shown as "N/A", "none", "nil", "-" or not present, return null
+- po_reference: ONLY set if there is a real, issued PO number (e.g. "PO-2025-1234"). Return null if: not present, "N/A", "none", "nil", "-", verbal approval only, retrospective PO, "to be raised", "pending".
+- contact_email: extract any email address shown on the invoice (vendor contact, billing email). If the email is from a free provider (gmail, yahoo, hotmail) copy it exactly. Return null if no email shown.
 - urgency_note: copy any urgency/pressure text verbatim e.g. "URGENT: Payment required within 2 days..." or null if absent
 - vendor_trn: if shown as "NOT REGISTERED", "[NOT REGISTERED]", "N/A" or similar, return null
 If a field is not visible leave it as null. Return JSON only — no text before or after."""
@@ -93,6 +95,7 @@ class ExtractedInvoice(BaseModel):
     vendor_name: Optional[str] = None
     vendor_address: Optional[str] = None
     vendor_trn: Optional[str] = None
+    contact_email: Optional[str] = None   # extracted vendor contact email
     invoice_number: Optional[str] = None
     invoice_date: Optional[str] = None
     customer_name: Optional[str] = None
@@ -523,7 +526,16 @@ def run_all_anomaly_checks(
                  Invoice.id != invoice_id)  # exclude self
         ).first()
         _po_raw = (extracted.po_reference or "").strip().lower()
-        has_po = bool(_po_raw) and _po_raw not in ("n/a", "na", "none", "nil", "-", "—", "not applicable")
+        # Treat verbal/retrospective approvals as "no PO" — only a real issued PO number counts
+        _po_null_values = {
+            "n/a", "na", "none", "nil", "-", "—", "not applicable", "not provided",
+            "0", "tbd", "pending", "null", "not available", "not issued",
+        }
+        _po_is_verbal = any(kw in _po_raw for kw in [
+            "verbal", "retrospective", "to be raised", "will be raised",
+            "pending", "approval only", "not yet", "to follow",
+        ])
+        has_po = bool(_po_raw) and _po_raw not in _po_null_values and not _po_is_verbal
         if not any_prior and total > 25_000 and not has_po:
             flags.append(AnomalyFlag(
                 flag_id=15, flag="ghost_supplier", category="fraud",
@@ -621,18 +633,28 @@ def run_all_anomaly_checks(
         ))
 
     # ANOMALY 20a — Free email address on high-value invoice (gmail/yahoo/hotmail)
-    _supplier_email = (extracted.vendor_address or "").lower()
+    # Check contact_email field first (explicit extraction), then scan all text fields
     _free_email_domains = ["@gmail.com", "@yahoo.com", "@hotmail.com", "@outlook.com", "@live.com", "@icloud.com"]
-    _has_free_email = any(d in _supplier_email for d in _free_email_domains)
-    if _has_free_email and total > 10_000:
+    _contact_email = (extracted.contact_email or "").lower()
+    _all_text = " ".join(filter(None, [
+        extracted.vendor_address or "",
+        extracted.vendor_name or "",
+        extracted.urgency_note or "",
+        _contact_email,
+    ])).lower()
+    _has_free_email = any(d in _contact_email for d in _free_email_domains) or \
+                      any(d in _all_text for d in _free_email_domains)
+    _detected_email = _contact_email if _contact_email and any(d in _contact_email for d in _free_email_domains) \
+                      else next((w for w in _all_text.split() if any(d in w for d in _free_email_domains)), "free email")
+    if _has_free_email and total > 5_000:
         flags.append(AnomalyFlag(
             flag_id=20, flag="free_email_supplier", category="fraud",
-            severity="MEDIUM",
-            title="Supplier Using Free Email Address on High-Value Invoice",
-            what_is_wrong=f"Supplier contact email is a free consumer address (Gmail/Yahoo/Hotmail) on an AED {total:,.2f} invoice. Legitimate businesses of this size use professional domain emails. This is a common invoice fraud indicator.",
-            action_required="Verify supplier identity independently. Call a known number from the company website — not any number printed on this invoice. Confirm bank details via separate channel.",
-            uae_law_reference="UAE AML Law No. 20 of 2018 — enhanced due diligence on suspicious counterparties; FTA Audit Guide — supplier identity verification",
-            vat_at_risk_aed=round(vat_shown, 2),
+            severity="HIGH",
+            title="Supplier Using Free Email Address — High Fraud Risk",
+            what_is_wrong=f"Supplier contact is a free consumer email ({_detected_email}) on an AED {total:,.2f} invoice. Legitimate registered businesses in the UAE use professional domain emails. Free email suppliers cannot be independently verified and are a primary BEC (Business Email Compromise) fraud indicator.",
+            action_required="DO NOT pay until supplier identity is verified independently. Call a known number (not from this invoice). Verify UAE trade license on DED portal. Confirm bank account via separate signed letter from supplier.",
+            uae_law_reference="UAE AML Law No. 20 of 2018 (Art.20) — enhanced due diligence; FTA Audit Guide — supplier identity verification; Central Bank BEC Circular 2023",
+            vat_at_risk_aed=round(vat_shown if vat_shown > 0 else total * 0.05, 2),
         ))
 
     # ANOMALY 20b — DMCC/Free zone supplier detected from name/address (stronger check)
@@ -788,6 +810,7 @@ def extract_invoice(
         vendor_name=raw.get("vendor_name"),
         vendor_address=raw.get("vendor_address"),
         vendor_trn=raw.get("vendor_trn"),
+        contact_email=raw.get("contact_email"),
         invoice_number=raw.get("invoice_number"),
         invoice_date=raw.get("invoice_date"),
         customer_name=raw.get("customer_name"),
