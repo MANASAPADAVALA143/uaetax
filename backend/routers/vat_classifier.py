@@ -56,6 +56,9 @@ class ClassificationResult(BaseModel):
     flag_for_review: bool
     flag_reason: Optional[str] = None
     uae_law_sources: Optional[List[str]] = None   # doc names used for classification
+    blocked_input_vat: bool = False               # Art.53 — input VAT not recoverable
+    blocked_reason: Optional[str] = None          # e.g. "Art.53(1)(b) — entertainment"
+    blocked_vat_amount: float = 0.0               # VAT amount that is blocked
 
 
 class TransactionResponse(BaseModel):
@@ -135,7 +138,54 @@ def classify_with_claude_and_rag(
     # Step 2: Build Claude prompt with RAG context
     system_prompt = """You are a UAE VAT specialist with deep knowledge of Federal Decree-Law No. 8 of 2017 and FTA clarifications. You classify transactions for UAE VAT returns with precision.
 
-You must return ONLY valid JSON with no additional text, markdown, or code blocks."""
+You must return ONLY valid JSON with no additional text, markdown, or code blocks.
+
+CRITICAL UAE VAT RULES — READ FIRST:
+
+PROFESSIONAL SERVICES ARE ALWAYS STANDARD RATED (5% VAT, Art.25):
+- Audit and assurance fees (KPMG, PwC, Deloitte, EY, BDO, Grant Thornton)
+- Tax advisory, CT advisory, corporate tax consulting fees
+- Legal advisory fees (law firms, advocates, LLPs, Hadef & Partners, Clifford Chance, Baker McKenzie)
+- Management consulting and strategy consulting (McKinsey, BCG, Bain, Pinnacle)
+- Financial advisory, M&A advisory, financial modelling
+- Compliance training and certification (Thomson Reuters, etc.)
+- Company secretarial and registered agent services
+- HR and payroll processing services
+- IT consulting, IT security, penetration testing, cybersecurity
+- Any service described as "advisory", "consulting", "assurance", "training", "secretarial"
+DO NOT classify these as exempt — they are NEVER exempt under UAE VAT.
+
+EXEMPT (Art.42) covers ONLY these financial services:
+- Bank interest, loan charges, credit facility fees
+- Currency exchange and foreign exchange transactions
+- Life insurance policies (not general/commercial insurance)
+- Investment fund management fees
+- Deposit and savings account services
+DO NOT apply exempt to professional fee services.
+
+INSURANCE (Art.25 STANDARD RATED — 5% VAT):
+- General/commercial insurance (AXA, Chubb, RSA, QBE, property, liability, cyber, indemnity)
+- Professional indemnity insurance = STANDARD RATED
+- Only pure life insurance policies = exempt
+
+COMMERCIAL PROPERTY (Art.25 STANDARD RATED):
+- Commercial office rent, warehouse rent, retail space = STANDARD RATED
+- DIFC, Business Bay, JLT, SZR, Burj Daman, DWTC office rent = ALWAYS standard rated
+- Free zone office rent = STANDARD RATED
+- Only residential villa/apartment rent for private use = EXEMPT (Art.28)
+
+SPECIFIC VENDOR RULES (ALWAYS STANDARD RATED):
+- KPMG, PwC, Deloitte, EY, McKinsey, BCG, Bain, Hadef, Thomson Reuters
+- Any "& Partners", "& Co", "LLP", "Advocates", "Consulting", "Advisory" in name
+- DIFC Investments, Emaar Facilities, any facilities management company
+
+ENTERTAINMENT / CATERING (Art.53 — Input VAT BLOCKED):
+- When description contains: catering, dinner, entertainment, hospitality, gala, buffet, restaurant
+- AND transaction_type = purchase:
+  - vat_treatment = standard_rated (the supply is taxable)
+  - Set blocked_input_vat = true
+  - Set blocked_reason = "Art.53(1)(b) — input VAT on entertainment/meals not recoverable"
+  - blocked_vat_amount = amount * 0.05"""
 
     context_section = (
         f"Relevant UAE VAT law context:\n{rag_context}"
@@ -160,7 +210,10 @@ Return JSON only:
   "confidence_score": <0.0-1.0>,
   "reasoning": "one sentence explanation citing UAE VAT law",
   "flag_for_review": true or false,
-  "flag_reason": "reason if flagged, null otherwise"
+  "flag_reason": "reason if flagged, null otherwise",
+  "blocked_input_vat": false,
+  "blocked_reason": null,
+  "blocked_vat_amount": 0.0
 }}"""
 
     try:
@@ -198,7 +251,10 @@ Return JSON only:
         reasoning = result.get("reasoning", "Classification based on UAE VAT rules")
         flag_for_review = bool(result.get("flag_for_review", False))
         flag_reason = result.get("flag_reason")
-        
+        blocked_input_vat = bool(result.get("blocked_input_vat", False))
+        blocked_reason = result.get("blocked_reason")
+        blocked_vat_amount = float(result.get("blocked_vat_amount", 0.0))
+
         return {
             "vat_treatment": vat_treatment,
             "vat_rate": vat_rate,
@@ -207,6 +263,9 @@ Return JSON only:
             "reasoning": reasoning,
             "flag_for_review": flag_for_review,
             "flag_reason": flag_reason,
+            "blocked_input_vat": blocked_input_vat,
+            "blocked_reason": blocked_reason,
+            "blocked_vat_amount": blocked_vat_amount,
             "rag_citations": rag_citations,
             "uae_law_sources": rag_sources,
         }
@@ -222,6 +281,9 @@ Return JSON only:
             "reasoning": "Classification failed - defaulting to standard rate. Please review manually.",
             "flag_for_review": True,
             "flag_reason": "AI classification failed - JSON parsing error",
+            "blocked_input_vat": False,
+            "blocked_reason": None,
+            "blocked_vat_amount": 0.0,
             "rag_citations": rag_citations,
             "uae_law_sources": rag_sources,
         }
@@ -235,6 +297,9 @@ Return JSON only:
             "reasoning": "Classification failed - defaulting to standard rate. Please review manually.",
             "flag_for_review": True,
             "flag_reason": f"AI classification error: {str(e)}",
+            "blocked_input_vat": False,
+            "blocked_reason": None,
+            "blocked_vat_amount": 0.0,
             "rag_citations": rag_citations,
             "uae_law_sources": rag_sources,
         }
@@ -296,7 +361,10 @@ async def classify_transaction(
         confidence_score=classification["confidence_score"],
         reasoning=classification["reasoning"],
         flag_for_review=classification["flag_for_review"],
-        flag_reason=classification["flag_reason"]
+        flag_reason=classification["flag_reason"],
+        blocked_input_vat=classification.get("blocked_input_vat", False),
+        blocked_reason=classification.get("blocked_reason"),
+        blocked_vat_amount=classification.get("blocked_vat_amount", 0.0),
     )
 
 
@@ -488,8 +556,14 @@ Return a JSON array (one object per transaction, in the same order). Each object
   "confidence_score": <0.0-1.0>,
   "reasoning": "<one sentence citing UAE VAT law>",
   "flag_for_review": true or false,
-  "flag_reason": "<string or null>"
+  "flag_reason": "<string or null>",
+  "blocked_input_vat": false,
+  "blocked_reason": null,
+  "blocked_vat_amount": 0.0
 }}
+
+CRITICAL: For any purchase transaction containing catering/entertainment/dinner/hospitality/gala/buffet/restaurant:
+set blocked_input_vat=true, blocked_reason="Art.53(1)(b) — input VAT on entertainment/meals not recoverable", blocked_vat_amount=amount*0.05
 
 Return ONLY the JSON array. No markdown, no preamble."""
 
@@ -523,6 +597,9 @@ Return ONLY the JSON array. No markdown, no preamble."""
                 "reasoning": r.get("reasoning", "Classified under UAE VAT Law"),
                 "flag_for_review": r.get("flag_for_review", False),
                 "flag_reason": r.get("flag_reason"),
+                "blocked_input_vat": bool(r.get("blocked_input_vat", False)),
+                "blocked_reason": r.get("blocked_reason"),
+                "blocked_vat_amount": float(r.get("blocked_vat_amount", 0.0)),
                 "rag_citations": [],
             })
 
@@ -569,6 +646,9 @@ Return ONLY the JSON array. No markdown, no preamble."""
                     "flag_for_review": classification["flag_for_review"],
                     "rag_citations": classification.get("rag_citations") or [],
                     "vat_rate": float(classification["vat_rate"]),
+                    "blocked_input_vat": classification.get("blocked_input_vat", False),
+                    "blocked_reason": classification.get("blocked_reason"),
+                    "blocked_vat_amount": classification.get("blocked_vat_amount", 0.0),
                 }
             )
 
@@ -605,6 +685,9 @@ Return ONLY the JSON array. No markdown, no preamble."""
                     "needs_review": bool(meta["flag_for_review"]),
                     "reasoning": t.ai_reasoning or "",
                     "rag_citations": meta.get("rag_citations") or [],
+                    "blocked_input_vat": bool(meta.get("blocked_input_vat", False)),
+                    "blocked_reason": meta.get("blocked_reason"),
+                    "blocked_vat_amount": float(meta.get("blocked_vat_amount", 0.0)),
                 }
             )
 

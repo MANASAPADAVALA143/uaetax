@@ -13,6 +13,9 @@ interface ClassificationResult {
   vat_treatment: string;
   confidence: number;
   reasoning?: string;
+  blocked_input_vat?: boolean;
+  blocked_reason?: string;
+  blocked_vat_amount?: number;
 }
 
 interface SavedTransaction {
@@ -123,6 +126,9 @@ export default function VATClassifier() {
           vat_treatment: String(c.vat_treatment ?? "standard_rated"),
           confidence: Math.round(Number(c.confidence ?? 0) * 100),
           reasoning: c.reasoning ? String(c.reasoning) : undefined,
+          blocked_input_vat: Boolean(c.blocked_input_vat),
+          blocked_reason: c.blocked_reason ? String(c.blocked_reason) : undefined,
+          blocked_vat_amount: typeof c.blocked_vat_amount === "number" ? c.blocked_vat_amount : 0,
         }))
       );
       // Refresh saved list and switch to it
@@ -472,21 +478,31 @@ export default function VATClassifier() {
                       {result.amount}
                     </td>
                     <td className="px-3 py-3.5 text-[13px] border-b border-[rgba(255,255,255,0.04)] align-middle">
-                      <span
-                        className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono tracking-wide whitespace-nowrap ${
-                          getTreatmentClass(result.vat_treatment) === "pill-std"
-                            ? "bg-[rgba(45,212,160,0.12)] text-green border border-[rgba(45,212,160,0.25)]"
-                            : getTreatmentClass(result.vat_treatment) === "pill-zero"
-                            ? "bg-[rgba(78,168,255,0.12)] text-blue border border-[rgba(78,168,255,0.25)]"
-                            : getTreatmentClass(result.vat_treatment) === "pill-ex"
-                            ? "bg-gold-pale text-gold-lt border border-border-g"
-                            : getTreatmentClass(result.vat_treatment) === "pill-flag"
-                            ? "bg-[rgba(255,107,107,0.12)] text-red border border-[rgba(255,107,107,0.25)]"
-                            : "bg-[rgba(122,132,153,0.14)] text-muted border border-[rgba(122,132,153,0.2)]"
-                        }`}
-                      >
-                        {result.vat_treatment}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono tracking-wide whitespace-nowrap ${
+                            getTreatmentClass(result.vat_treatment) === "pill-std"
+                              ? "bg-[rgba(45,212,160,0.12)] text-green border border-[rgba(45,212,160,0.25)]"
+                              : getTreatmentClass(result.vat_treatment) === "pill-zero"
+                              ? "bg-[rgba(78,168,255,0.12)] text-blue border border-[rgba(78,168,255,0.25)]"
+                              : getTreatmentClass(result.vat_treatment) === "pill-ex"
+                              ? "bg-gold-pale text-gold-lt border border-border-g"
+                              : getTreatmentClass(result.vat_treatment) === "pill-flag"
+                              ? "bg-[rgba(255,107,107,0.12)] text-red border border-[rgba(255,107,107,0.25)]"
+                              : "bg-[rgba(122,132,153,0.14)] text-muted border border-[rgba(122,132,153,0.2)]"
+                          }`}
+                        >
+                          {result.vat_treatment}
+                        </span>
+                        {result.blocked_input_vat && (
+                          <span
+                            title={result.blocked_reason || "Art.53(1)(b) — input VAT not recoverable"}
+                            className="inline-block px-2 py-0.5 rounded text-[9px] font-bold font-mono tracking-wide whitespace-nowrap bg-[rgba(255,183,0,0.15)] text-amber border border-amber/30"
+                          >
+                            ⚠ BLOCKED (Art.53)
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3.5 text-[13px] border-b border-[rgba(255,255,255,0.04)] align-middle">
                       <span
