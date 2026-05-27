@@ -804,6 +804,30 @@ def extract_invoice(
         total_aed=raw.get("total_aed"),
     )
 
+    # ── Dedup guard — return existing record if same company+number+vendor+total ──
+    # Prevents 100-row problem when user re-uploads the same PDFs
+    if extracted.invoice_number and extracted.vendor_name and extracted.total_aed:
+        existing_inv = db.query(Invoice).filter(
+            and_(
+                Invoice.company_id == company_id,
+                Invoice.invoice_number == extracted.invoice_number,
+                Invoice.vendor_name == extracted.vendor_name,
+                Invoice.total_aed == extracted.total_aed,
+            )
+        ).first()
+        if existing_inv:
+            print(
+                f"[extract] Duplicate detected — returning existing invoice "
+                f"id={existing_inv.id} for {extracted.vendor_name} #{extracted.invoice_number}",
+                flush=True,
+            )
+            return {
+                "invoice_id": existing_inv.id,
+                "extracted": extracted.model_dump(),
+                "filename": filename,
+                "duplicate": True,
+            }
+
     inv = Invoice(
         company_id=company_id,
         filename=filename,
@@ -911,13 +935,15 @@ Return JSON only:
     inv.overall_risk = risk.risk_level.lower()
 
     # ── Risk-gated status assignment ──────────────────────────────────────────
-    # score < 30  → auto-approve, write to transactions immediately
+    # score < 30 AND no HIGH flags → auto-approve, write transactions immediately
+    # score < 30 BUT has HIGH flag → review queue (e.g. duplicate with low score)
     # score 30–60 → hold in review queue (AP must approve)
     # score > 60  → hard block (Finance Manager escalation required)
     auto_approved = False
     transactions_created = 0
+    high_flags = [f for f in risk.flags if f.severity == "HIGH"]
 
-    if risk.risk_score < 30:
+    if risk.risk_score < 30 and len(high_flags) == 0:
         inv.status = "auto_approved"
         auto_approved = True
 
@@ -1003,6 +1029,13 @@ Return JSON only:
                 ))
                 transactions_created += 1
 
+    elif risk.risk_score < 30 and len(high_flags) > 0:
+        # Low score but a serious flag (e.g. exact duplicate) — must go to review
+        inv.status = "review"
+        inv.review_reason = (
+            f"Low risk score ({risk.risk_score}/100) but {len(high_flags)} HIGH severity "
+            f"flag(s) detected ({', '.join(f.flag for f in high_flags)}) — manual review required"
+        )
     elif risk.risk_score <= 60:
         inv.status = "review"   # Hold — AP accountant must approve
     else:

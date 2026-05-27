@@ -52,6 +52,8 @@ export default function VATClassifier() {
   const [error, setError] = useState<string | null>(null);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [reclassifying, setReclassifying] = useState(false);
+  const [reclassifyMsg, setReclassifyMsg] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -143,6 +145,22 @@ export default function VATClassifier() {
       console.error("Classification error:", err);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleReclassifyExempt = async () => {
+    if (!window.confirm("Re-run AI classification on all exempt purchase transactions? Professional services wrongly marked exempt will be corrected to standard-rated.")) return;
+    setReclassifying(true);
+    setReclassifyMsg(null);
+    try {
+      const { data } = await apiClient.post("/api/vat/reclassify-exempt");
+      setReclassifyMsg(`✅ ${data.message}`);
+      if (data.reclassified > 0) await fetchSaved();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setReclassifyMsg(`❌ Failed: ${detail || "Unknown error"}`);
+    } finally {
+      setReclassifying(false);
     }
   };
 
@@ -254,6 +272,13 @@ export default function VATClassifier() {
         </div>
       )}
 
+      {/* Reclassify result banner */}
+      {reclassifyMsg && (
+        <div className={`mb-4 px-4 py-3 rounded-[10px] text-sm border ${reclassifyMsg.startsWith("✅") ? "border-green/30 bg-[rgba(45,212,160,0.08)] text-green" : "border-red/30 bg-[rgba(255,107,107,0.08)] text-red"}`}>
+          {reclassifyMsg}
+        </div>
+      )}
+
       {/* Upload message banner */}
       {uploadMsg && (
         <div className={`mb-4 px-4 py-3 rounded-[10px] text-sm border ${uploadMsg.startsWith("⚠️") ? "border-amber/40 bg-[rgba(255,183,0,0.08)] text-amber" : "border-green/30 bg-[rgba(45,212,160,0.08)] text-green"}`}>
@@ -284,8 +309,19 @@ export default function VATClassifier() {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <span className="text-[10px] text-muted2 font-mono uppercase">Auto-verified · Ready for VAT Return</span>
+              {savedTxns.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleReclassifyExempt}
+                  disabled={reclassifying}
+                  className="px-3 py-1 rounded-[6px] text-[11px] font-medium border border-amber/30 text-amber hover:bg-[rgba(255,183,0,0.1)] disabled:opacity-50 transition-all"
+                  title="Re-run AI on exempt purchases — corrects professional services wrongly marked as exempt"
+                >
+                  {reclassifying ? "Re-classifying…" : "⚡ Fix Exempt"}
+                </button>
+              )}
               {savedTxns.length > 0 && (
                 <button
                   type="button"

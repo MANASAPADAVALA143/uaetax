@@ -882,3 +882,80 @@ async def bulk_verify_transactions(
     db.commit()
 
     return {"verified_count": len(rows)}
+
+
+@router.post("/reclassify-exempt")
+async def reclassify_exempt_purchases(
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """
+    Re-run AI classification on all purchase transactions currently marked
+    as 'exempt'. Used to correct transactions where professional services
+    (KPMG, law firms, consultants) were wrongly classified as exempt.
+
+    With the updated system prompt, they will now return standard_rated.
+    """
+    exempt_purchases = (
+        db.query(Transaction)
+        .filter(
+            Transaction.company_id == company_id,
+            Transaction.transaction_type == "purchase",
+            Transaction.vat_treatment == "exempt",
+        )
+        .all()
+    )
+
+    if not exempt_purchases:
+        return {"reclassified": 0, "message": "No exempt purchase transactions found."}
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    entity_type = (company.entity_type if company else None) or "mainland"
+
+    reclassified = 0
+    results = []
+
+    for txn in exempt_purchases:
+        try:
+            classification = classify_with_claude_and_rag(
+                description=txn.description or "",
+                amount_aed=float(txn.amount_aed or 0),
+                vendor_or_customer=txn.vendor_or_customer,
+                transaction_type="purchase",
+                entity_type=entity_type,
+            )
+            new_treatment = classification["vat_treatment"]
+            if new_treatment != "exempt":
+                old_treatment = txn.vat_treatment
+                txn.vat_treatment = new_treatment
+                txn.vat_amount_aed = classification["vat_amount_aed"]
+                txn.confidence_score = round(classification["confidence_score"] * 100, 1)
+                txn.ai_reasoning = classification["reasoning"]
+                txn.is_verified = False  # needs re-verification after reclassify
+                _append_verification_history(
+                    txn,
+                    {
+                        "type": "reclassify",
+                        "previous_vat_treatment": old_treatment,
+                        "new_vat_treatment": new_treatment,
+                        "note": "Auto-reclassified via /reclassify-exempt endpoint",
+                    },
+                )
+                reclassified += 1
+                results.append({
+                    "id": txn.id,
+                    "description": txn.description,
+                    "old_treatment": old_treatment,
+                    "new_treatment": new_treatment,
+                    "new_vat_amount_aed": txn.vat_amount_aed,
+                })
+        except Exception as exc:
+            print(f"[reclassify-exempt] error on txn {txn.id}: {exc}", flush=True)
+
+    db.commit()
+    return {
+        "reclassified": reclassified,
+        "total_checked": len(exempt_purchases),
+        "message": f"{reclassified} of {len(exempt_purchases)} exempt purchases reclassified to standard-rated.",
+        "details": results,
+    }
