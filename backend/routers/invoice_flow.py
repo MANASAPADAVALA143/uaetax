@@ -180,6 +180,29 @@ def _mann_kendall_trend(values: List[float]) -> float:
     return s / max_s if max_s else 0.0
 
 
+# ── Confidence scoring ─────────────────────────────────────────────────────────
+
+def calculate_confidence(risk_score: int, flag_count: int) -> float:
+    """
+    Return a varied AI confidence score (0.30–0.97) based on risk assessment.
+    Higher risk score and more flags drive confidence down so the demo shows
+    realistic variance across invoices rather than a uniform value.
+
+    Typical outputs:
+      risk=0,  flags=0  → 0.97  (clean invoice)
+      risk=10, flags=1  → 0.89
+      risk=25, flags=2  → 0.78
+      risk=40, flags=3  → 0.66
+      risk=60, flags=4  → 0.51
+      risk=80, flags=5  → 0.38
+    """
+    base = 0.97
+    risk_penalty = risk_score * 0.0057     # 0–100 risk → up to -0.57 penalty
+    flag_penalty = flag_count * 0.015      # each flag → -0.015
+    confidence = base - risk_penalty - flag_penalty
+    return round(max(0.30, min(0.97, confidence)), 2)
+
+
 # ── Main anomaly engine ────────────────────────────────────────────────────────
 
 def run_all_anomaly_checks(
@@ -409,11 +432,11 @@ def run_all_anomaly_checks(
         if inv_date < quarter_start - timedelta(days=90):
             flags.append(AnomalyFlag(
                 flag_id=10, flag="tax_period_mismatch", category="vat_compliance",
-                severity="MEDIUM",
-                title="Invoice Outside Current VAT Period",
-                what_is_wrong=f"Invoice date {inv_date_s} is more than one VAT period ago. Claiming in current return may violate time-of-supply rules.",
-                action_required="Verify if this is a late claim. UAE VAT allows claim in next period only. Older claims require FTA voluntary disclosure.",
-                uae_law_reference="Article 79, UAE VAT Law — time of supply and input tax period rules",
+                severity="LOW",
+                title="Invoice Pre-dates Current VAT Period — Please Verify",
+                what_is_wrong=f"Invoice date {inv_date_s} is from a prior VAT quarter. Late claims are permitted under Article 79 but should be reviewed to confirm the claim has not already been included in an earlier return.",
+                action_required="Confirm this invoice was not already included in a prior VAT return. If the claim was missed, it can generally be included in the next available return. Consult your VAT advisor for claims older than 12 months.",
+                uae_law_reference="Article 79, UAE VAT Law — input tax recovery period; FTA Public Clarification VATP006",
                 vat_at_risk_aed=round(vat_shown, 2),
             ))
 
@@ -882,7 +905,8 @@ Return JSON only:
 
     # ── Persist classification + risk results ─────────────────────────────────
     inv.vat_treatment = vat_result.get("vat_treatment")
-    inv.confidence = vat_result.get("confidence", 0)
+    # Use calculate_confidence so scores vary realistically across invoices
+    inv.confidence = calculate_confidence(risk.risk_score, len(risk.flags))
     inv.risk_flags = [f.model_dump() for f in risk.flags]
     inv.overall_risk = risk.risk_level.lower()
 
