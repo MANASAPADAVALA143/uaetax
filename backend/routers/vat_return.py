@@ -442,7 +442,10 @@ async def generate_return(
     
     # Calculate VAT return boxes
     box_values = calculate_vat_return_boxes(transactions)
-    
+    # Separate DB columns (box1-8) from UI-only metadata (keys prefixed with _)
+    db_box_values   = {k: v for k, v in box_values.items() if not k.startswith("_")}
+    meta_box_values = {k: v for k, v in box_values.items() if k.startswith("_")}
+
     # Check if return already exists
     existing_return = db.query(VATReturn).filter(
         and_(
@@ -451,20 +454,20 @@ async def generate_return(
             VATReturn.period_end == request.period_end
         )
     ).first()
-    
+
     if existing_return:
-        # Update existing return
-        for key, value in box_values.items():
+        # Update existing return — only DB columns, not metadata keys
+        for key, value in db_box_values.items():
             setattr(existing_return, key, value)
         existing_return.status = "draft"
         vat_return = existing_return
     else:
-        # Create new return
+        # Create new return — only DB columns, not metadata keys
         vat_return = VATReturn(
             company_id=company_id,
             period_start=request.period_start,
             period_end=request.period_end,
-            **box_values,
+            **db_box_values,
             status="draft"
         )
         db.add(vat_return)
@@ -486,7 +489,8 @@ async def generate_return(
         "company_id": vat_return.company_id,
         "period_start": vat_return.period_start,
         "period_end": vat_return.period_end,
-        **box_values,
+        **db_box_values,   # box1-8 from DB record
+        **meta_box_values, # _rc_net_aed, _entertainment_blocked_* etc. for UI
         "status": vat_return.status,
         "created_at": vat_return.created_at,
         "pdf_url": f"/api/vat/returns/{vat_return.id}/pdf",
