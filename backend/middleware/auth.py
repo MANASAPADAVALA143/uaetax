@@ -76,15 +76,40 @@ async def get_current_user(
     return _verify_jwt(token)
 
 
+_LOCAL_DEV = os.getenv("LOCAL_DEV", "").lower() in ("1", "true", "yes")
+
+
 async def get_current_company_id(
     x_company_id: Optional[str] = Header(default=None, alias="X-Company-ID"),
-    user: dict = Depends(get_current_user),
+    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ) -> int:
     """
     Dependency: verify token, then confirm user belongs to the requested company.
     Returns company_id as int.
+
+    LOCAL_DEV=true  → skips JWT; trusts X-Company-ID directly (first company
+    in DB used as fallback). Safe because this mode is never set in production.
     """
+    # ── Local dev bypass ─────────────────────────────────────────
+    if _LOCAL_DEV:
+        if x_company_id:
+            try:
+                return int(x_company_id)
+            except ValueError:
+                pass
+        # Fallback: use the first company in the database
+        first = db.query(Company).order_by(Company.id).first()
+        if first:
+            return first.id
+        raise HTTPException(status_code=400, detail="No company found — run setup-company first")
+
+    # ── Production: full JWT + membership check ───────────────────
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+    token = authorization.split(" ", 1)[1].strip()
+    user = _verify_jwt(token)
+
     if not x_company_id:
         raise HTTPException(status_code=400, detail="Missing X-Company-ID header")
     try:

@@ -47,6 +47,16 @@ const AuthContext = createContext<AuthState>({
 
 const ACTIVE_COMPANY_KEY = "gulftax_active_company_id";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const LOCAL_DEV = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
+
+/** Mock company used when LOCAL_DEV=true — backend uses first company in DB */
+const DEV_COMPANY: CompanyInfo = {
+  company_id: 1,
+  company_name: "AI Baraka Trading LLC",
+  trn: "100487230000015",
+  entity_type: "mainland",
+  role: "owner",
+};
 
 // ── Provider ───────────────────────────────────────────────────
 
@@ -126,6 +136,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const init = async () => {
+      // ── Local dev mode: skip Supabase entirely ──────────────
+      if (LOCAL_DEV) {
+        setCompanies([DEV_COMPANY]);
+        setActiveCompanyState(DEV_COMPANY);
+        setApiAuth(null, DEV_COMPANY.company_id); // no token needed — backend bypasses auth
+        setLoading(false);
+        return;
+      }
+
       const { data } = await supabase.auth.getSession();
       const s = data.session;
       if (!mounted) return;
