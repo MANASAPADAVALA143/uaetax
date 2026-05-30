@@ -32,9 +32,9 @@ try:
         )
         db.add(company)
         db.commit()
-        print("✅ Created company: AI Baraka Trading LLC (id=1)")
+        print("OK Created company: AI Baraka Trading LLC (id=1)")
     else:
-        print(f"✅ Company already exists: {company.name}")
+        print(f"OK Company already exists: {company.name}")
 
     # ── Sample transactions so VAT Classifier tab isn't empty ──────
     txn_count = db.query(Transaction).filter(Transaction.company_id == 1).count()
@@ -58,11 +58,11 @@ try:
         ]
         db.add_all(sample_txns)
         db.commit()
-        print(f"✅ Added {len(sample_txns)} sample transactions")
+        print(f"OK Added {len(sample_txns)} sample transactions")
     else:
-        print(f"✅ Transactions already exist ({txn_count} records)")
+        print(f"OK Transactions already exist ({txn_count} records)")
 
-    print("\n🚀 Local database ready. Open http://localhost:3000/dashboard")
+    print("\nREADY: Local database ready. Open http://localhost:3000/dashboard")
 
 finally:
     db.close()

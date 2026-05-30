@@ -570,16 +570,23 @@ Return ONLY the JSON array. No markdown, no preamble."""
         try:
             msg = claude_client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=4096,
+                max_tokens=8192,  # increased: 30 rows × ~250 tokens each needs ~7500 tokens
                 temperature=0.1,
                 timeout=90.0,  # 90s hard limit — returns error instead of hanging
                 messages=[{"role": "user", "content": batch_prompt}],
             )
             raw_text = msg.content[0].text.strip()
+            # Strip markdown fences if present
             if "```" in raw_text:
                 raw_text = raw_text.split("```")[1].split("```")[0].strip()
                 if raw_text.startswith("json"):
                     raw_text = raw_text[4:].strip()
+            # Extract JSON array robustly — find first [ and last ]
+            # Handles cases where Claude adds trailing commentary
+            start = raw_text.find("[")
+            end = raw_text.rfind("]")
+            if start != -1 and end != -1 and end > start:
+                raw_text = raw_text[start:end + 1]
             batch_results: List[Dict[str, Any]] = json.loads(raw_text)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Batch classification failed: {exc}")
