@@ -35,11 +35,13 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+const _LOCAL_DEV = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
+
 // ── Response interceptor — handle auth errors ──────────────────
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !_LOCAL_DEV) {
       if (error.response?.status === 401) {
         // Token expired or missing — redirect to login
         window.location.href = "/login";

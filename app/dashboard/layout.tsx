@@ -18,7 +18,10 @@ export default function DashboardLayout({
   const [activeNav, setActiveNav] = useState("overview");
 
   // Redirect to setup only if loading finished AND no companies found after a short delay
+  // Skip redirect entirely in LOCAL_DEV mode
+  const isLocalDev = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
   useEffect(() => {
+    if (isLocalDev) return; // local dev bypass — no redirect
     if (loading) return;
     if (companies.length === 0) {
       const timer = setTimeout(() => {
@@ -26,7 +29,7 @@ export default function DashboardLayout({
       }, 2000); // 2s grace period for API
       return () => clearTimeout(timer);
     }
-  }, [loading, companies, router]);
+  }, [loading, companies, router, isLocalDev]);
 
   type MainNavItem = {
     id: string;
