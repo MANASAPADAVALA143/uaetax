@@ -19,9 +19,11 @@ from routers import tax_memo
 from routers import invoice_flow
 from routers import fta_reports
 from routers.auth_router import router as auth_router
+from routers.einvoicing import router as einvoicing_router
+from routers.corporatetax_routes import router as corporatetax_spec_router
 
-# Load .env only in local dev — Railway injects env vars directly
-_env_file = Path(__file__).resolve().parent / ".env"
+# Load repo-root .env only in local dev — Railway injects env vars directly
+_env_file = Path(__file__).resolve().parent.parent / ".env"
 if _env_file.exists():
     load_dotenv(_env_file, override=True)
 
@@ -64,6 +66,8 @@ app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"
 app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
 app.include_router(invoice_flow.router)  # prefix="/api/invoice" defined in router
 app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
+app.include_router(einvoicing_router)
+app.include_router(corporatetax_spec_router)
 
 # CORS — hardcoded origins + regex fallback for any *.vercel.app deployment
 # No env-var override so Railway can never accidentally break this
