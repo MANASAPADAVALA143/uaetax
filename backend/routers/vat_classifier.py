@@ -16,6 +16,7 @@ from middleware.auth import get_current_company_id
 
 # pgvector-backed RAG service — import never fails; returns [] on any error
 from services.uae_tax_rag_pg import uae_tax_rag  # type: ignore
+from services.vat_decision_tree import classify_with_decision_tree
 from services.vat_enrichment import apply_post_classification_rules, enrich_transaction_row
 
 from database import get_db
@@ -104,9 +105,43 @@ class BulkApproveHighConfidenceRequest(BaseModel):
 
 
 def _vat_amount_for_treatment(amount_aed: float, treatment: Optional[str]) -> float:
-    if treatment in ("standard_rated", "reverse_charge"):
+    if treatment in ("standard_rated", "reverse_charge", "import_vat"):
         return round(float(amount_aed) * 0.05, 2)
     return 0.0
+
+
+def _save_classification_fields(
+    classification: Dict[str, Any],
+    amount_aed: float,
+) -> Dict[str, Any]:
+    """Normalize classification dict from decision tree or AI+rules."""
+    conf_0_100 = classification.get("confidence_score_0_100")
+    if conf_0_100 is None:
+        raw = classification.get("confidence_score", 0.85)
+        conf_0_100 = raw * 100 if raw <= 1 else raw
+
+    return {
+        "vat_treatment": classification.get("vat_treatment", "standard_rated"),
+        "vat_rate": int(classification.get("vat_rate", 5)),
+        "vat_amount_aed": float(
+            classification.get("vat_amount_aed")
+            or _vat_amount_for_treatment(amount_aed, classification.get("vat_treatment"))
+        ),
+        "confidence_score_0_100": float(conf_0_100),
+        "confidence_score_0_1": float(conf_0_100) / 100.0,
+        "reasoning": classification.get("explanation") or classification.get("reasoning", ""),
+        "flag_for_review": bool(classification.get("flag_for_review", False)),
+        "flag_reason": classification.get("flag_reason"),
+        "blocked_input_vat": bool(classification.get("blocked_input_vat", False)),
+        "blocked_reason": classification.get("blocked_reason"),
+        "blocked_vat_amount": float(classification.get("blocked_vat_amount", 0.0)),
+        "box_number": classification.get("box_number"),
+        "flags": classification.get("flags") or [],
+        "review_tier": classification.get("review_tier", "review_required"),
+        "entertainment_flag": bool(classification.get("entertainment_flag", False)),
+        "reverse_charge_flag": bool(classification.get("reverse_charge_flag", False)),
+        "import_vat_flag": bool(classification.get("import_vat_flag", False)),
+    }
 
 
 def _append_verification_history(transaction: Transaction, entry: Dict[str, Any]) -> None:
@@ -274,6 +309,7 @@ Return JSON only:
             "blocked_vat_amount": blocked_vat_amount,
             "rag_citations": rag_citations,
             "uae_law_sources": rag_sources,
+            "_amount_aed": amount_aed,
         }
         return apply_post_classification_rules(
             normalized,
@@ -345,6 +381,7 @@ async def classify_transaction(
         transaction_type=request.transaction_type,
         entity_type=entity_type
     )
+    saved = _save_classification_fields(classification, request.amount_aed)
     
     # Save to database — always use the verified company_id from auth
     transaction = Transaction(
@@ -354,12 +391,14 @@ async def classify_transaction(
         amount_aed=request.amount_aed,
         vendor_or_customer=request.vendor_or_customer,
         invoice_number=request.invoice_number,
-        vat_treatment=classification["vat_treatment"],
+        vat_treatment=saved["vat_treatment"],
         transaction_type=request.transaction_type,
-        vat_amount_aed=classification["vat_amount_aed"],
-        confidence_score=classification["confidence_score"] * 100,  # Convert to 0-100 scale
-        ai_reasoning=classification["reasoning"],
-        is_verified=False,
+        vat_amount_aed=saved["vat_amount_aed"],
+        confidence_score=saved["confidence_score_0_100"],
+        ai_reasoning=saved["reasoning"],
+        box_number=saved["box_number"],
+        classification_flags=saved["flags"],
+        is_verified=saved["review_tier"] == "auto_approve",
     )
     
     db.add(transaction)
@@ -367,16 +406,16 @@ async def classify_transaction(
     db.refresh(transaction)
     
     return ClassificationResult(
-        vat_treatment=classification["vat_treatment"],
-        vat_rate=classification["vat_rate"],
-        vat_amount_aed=classification["vat_amount_aed"],
-        confidence_score=classification["confidence_score"],
-        reasoning=classification["reasoning"],
-        flag_for_review=classification["flag_for_review"],
-        flag_reason=classification["flag_reason"],
-        blocked_input_vat=classification.get("blocked_input_vat", False),
-        blocked_reason=classification.get("blocked_reason"),
-        blocked_vat_amount=classification.get("blocked_vat_amount", 0.0),
+        vat_treatment=saved["vat_treatment"],
+        vat_rate=saved["vat_rate"],
+        vat_amount_aed=saved["vat_amount_aed"],
+        confidence_score=saved["confidence_score_0_1"],
+        reasoning=saved["reasoning"],
+        flag_for_review=saved["flag_for_review"],
+        flag_reason=saved["flag_reason"],
+        blocked_input_vat=saved["blocked_input_vat"],
+        blocked_reason=saved["blocked_reason"],
+        blocked_vat_amount=saved["blocked_vat_amount"],
     )
 
 
@@ -435,7 +474,7 @@ def classify_bulk(
         # Drop rows where all values are NaN (title/spacer rows)
         df = df.dropna(how="all").reset_index(drop=True)
 
-        description_col = amount_col = vendor_col = date_col = invoice_col = None
+        description_col = amount_col = vendor_col = date_col = invoice_col = trn_col = country_col = None
         for col in df.columns:
             col_lower = str(col).lower()
             if "desc" in col_lower:
@@ -452,6 +491,10 @@ def classify_bulk(
                 date_col = col
             if "invoice" in col_lower:
                 invoice_col = col
+            if col_lower in ("trn", "vendor trn", "supplier trn", "vendor_trn", "tax registration"):
+                trn_col = col
+            if "country" in col_lower or "vendor country" in col_lower:
+                country_col = col
 
         if not description_col:
             raise HTTPException(status_code=400, detail=f"No description column found. Columns detected: {list(df.columns)}")
@@ -492,10 +535,22 @@ def classify_bulk(
             invoice_num = (
                 str(row[invoice_col]) if invoice_col and pd.notna(row.get(invoice_col, "")) else None
             )
+            vendor_trn = (
+                str(row[trn_col]).strip()
+                if trn_col and pd.notna(row.get(trn_col, ""))
+                else None
+            )
+            vendor_country = (
+                str(row[country_col]).strip()
+                if country_col and pd.notna(row.get(country_col, ""))
+                else None
+            )
             row_specs.append({
                 "description": description,
                 "amount": amount,
                 "vendor": vendor,
+                "vendor_trn": vendor_trn,
+                "vendor_country": vendor_country,
                 "trans_date": trans_date,
                 "invoice_num": invoice_num,
                 "row_tx_type": row_tx_type,
@@ -542,85 +597,18 @@ def classify_bulk(
                 "excel_download_url": None,
             }
 
-        # ── Classify ALL rows in ONE Claude API call (batch) ─────────────────
-        if claude_client is None:
-            raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured.")
-
-        batch_items = "\n".join(
-            f'{i+1}. description="{s["description"]}" | amount={s["amount"]} AED'
-            f' | party="{s["vendor"] or "N/A"}" | type={s["row_tx_type"]}'
-            for i, s in enumerate(row_specs)
-        )
-
-        batch_prompt = f"""You are a UAE VAT expert. Classify each transaction under Federal Decree-Law No.8 of 2017.
-
-Entity type: {entity_type}
-
-Transactions:
-{batch_items}
-
-Return a JSON array (one object per transaction, in the same order). Each object:
-{{
-  "index": <1-based int>,
-  "vat_treatment": "standard_rated|zero_rated|exempt|out_of_scope|reverse_charge",
-  "vat_rate": 5 or 0,
-  "vat_amount_aed": <net_amount * rate/100>,
-  "confidence_score": <0.0-1.0>,
-  "reasoning": "<one sentence citing UAE VAT law>",
-  "flag_for_review": true or false,
-  "flag_reason": "<string or null>",
-  "blocked_input_vat": false,
-  "blocked_reason": null,
-  "blocked_vat_amount": 0.0
-}}
-
-CRITICAL: For any purchase transaction containing catering/entertainment/dinner/hospitality/gala/buffet/restaurant:
-set blocked_input_vat=true, blocked_reason="Art.53(1)(b) — input VAT on entertainment/meals not recoverable", blocked_vat_amount=amount*0.05
-
-Return ONLY the JSON array. No markdown, no preamble."""
-
-        try:
-            msg = claude_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8192,  # increased: 30 rows × ~250 tokens each needs ~7500 tokens
-                temperature=0.1,
-                timeout=90.0,  # 90s hard limit — returns error instead of hanging
-                messages=[{"role": "user", "content": batch_prompt}],
-            )
-            raw_text = msg.content[0].text.strip()
-            # Strip markdown fences if present
-            if "```" in raw_text:
-                raw_text = raw_text.split("```")[1].split("```")[0].strip()
-                if raw_text.startswith("json"):
-                    raw_text = raw_text[4:].strip()
-            # Extract JSON array robustly — find first [ and last ]
-            # Handles cases where Claude adds trailing commentary
-            start = raw_text.find("[")
-            end = raw_text.rfind("]")
-            if start != -1 and end != -1 and end > start:
-                raw_text = raw_text[start:end + 1]
-            batch_results: List[Dict[str, Any]] = json.loads(raw_text)
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Batch classification failed: {exc}")
-
-        # Map results back by index (Claude returns in order but be safe)
-        result_map = {r["index"]: r for r in batch_results}
+        # ── Classify ALL rows with deterministic decision tree ────────────────
         classifications: List[Dict[str, Any]] = []
-        for i, spec in enumerate(row_specs):
-            r = result_map.get(i + 1, {})
-            classifications.append({
-                "vat_treatment": r.get("vat_treatment", "standard_rated"),
-                "vat_rate": r.get("vat_rate", 5),
-                "vat_amount_aed": r.get("vat_amount_aed", spec["amount"] * 0.05),
-                "confidence_score": r.get("confidence_score", 0.8),
-                "reasoning": r.get("reasoning", "Classified under UAE VAT Law"),
-                "flag_for_review": r.get("flag_for_review", False),
-                "flag_reason": r.get("flag_reason"),
-                "blocked_input_vat": bool(r.get("blocked_input_vat", False)),
-                "blocked_reason": r.get("blocked_reason"),
-                "blocked_vat_amount": float(r.get("blocked_vat_amount", 0.0)),
-                "rag_citations": [],
-            })
+        for spec in row_specs:
+            raw = classify_with_decision_tree(
+                description=spec["description"],
+                amount_aed=spec["amount"],
+                vendor_or_customer=spec["vendor"],
+                transaction_type=spec["row_tx_type"],
+                vendor_trn=spec.get("vendor_trn"),
+                vendor_country=spec.get("vendor_country"),
+            )
+            classifications.append(_save_classification_fields(raw, spec["amount"]))
 
         # ── Build DB objects and response rows ────────────────────────────────
         db_transactions: List[Transaction] = []
@@ -638,9 +626,11 @@ Return ONLY the JSON array. No markdown, no preamble."""
                 vat_treatment=classification["vat_treatment"],
                 transaction_type=spec["row_tx_type"],
                 vat_amount_aed=classification["vat_amount_aed"],
-                confidence_score=classification["confidence_score"] * 100,
+                confidence_score=classification["confidence_score_0_100"],
                 ai_reasoning=classification["reasoning"],
-                is_verified=True,  # Auto-verify bulk uploads — Claude classified at 85-95% confidence
+                box_number=classification["box_number"],
+                classification_flags=classification["flags"],
+                is_verified=classification["review_tier"] == "auto_approve",
                 source="vat_classifier",
             )
             db_transactions.append(db_transaction)
@@ -652,10 +642,12 @@ Return ONLY the JSON array. No markdown, no preamble."""
                     "vat_treatment": classification["vat_treatment"],
                     "vat_rate": classification["vat_rate"],
                     "vat_amount_aed": classification["vat_amount_aed"],
-                    "confidence_0_1": classification["confidence_score"],
+                    "box_number": classification["box_number"],
+                    "confidence_0_1": classification["confidence_score_0_1"],
                     "reasoning": classification["reasoning"],
                     "needs_review": classification["flag_for_review"],
                     "flag_reason": classification.get("flag_reason"),
+                    "review_tier": classification["review_tier"],
                     "transaction_type": spec["row_tx_type"],
                 }
             )
@@ -663,11 +655,13 @@ Return ONLY the JSON array. No markdown, no preamble."""
             per_row_meta.append(
                 {
                     "flag_for_review": classification["flag_for_review"],
-                    "rag_citations": classification.get("rag_citations") or [],
+                    "review_tier": classification["review_tier"],
                     "vat_rate": float(classification["vat_rate"]),
                     "blocked_input_vat": classification.get("blocked_input_vat", False),
                     "blocked_reason": classification.get("blocked_reason"),
                     "blocked_vat_amount": classification.get("blocked_vat_amount", 0.0),
+                    "box_number": classification.get("box_number"),
+                    "flags": classification.get("flags") or [],
                 }
             )
 
@@ -689,8 +683,8 @@ Return ONLY the JSON array. No markdown, no preamble."""
         _BULK_CLASSIFY_EXCEL_PATHS[job_id] = excel_path
 
         classifications_out: List[Dict[str, Any]] = []
-        for t, meta in zip(db_transactions, per_row_meta):
-            conf01 = (t.confidence_score or 0.0) / 100.0
+        for t, meta, classification in zip(db_transactions, per_row_meta, classifications):
+            conf01 = classification["confidence_score_0_1"]
             classifications_out.append(
                 {
                     "id": t.id,
@@ -698,12 +692,15 @@ Return ONLY the JSON array. No markdown, no preamble."""
                     "vendor_or_customer": t.vendor_or_customer or "",
                     "amount_aed": float(t.amount_aed),
                     "vat_treatment": t.vat_treatment or "standard_rated",
-                    "vat_rate": float(meta["vat_rate"]),
+                    "vat_rate": float(classification["vat_rate"]),
                     "vat_amount_aed": float(t.vat_amount_aed or 0.0),
                     "confidence": conf01,
                     "needs_review": bool(meta["flag_for_review"]),
+                    "review_tier": meta.get("review_tier"),
                     "reasoning": t.ai_reasoning or "",
-                    "rag_citations": meta.get("rag_citations") or [],
+                    "explanation": t.ai_reasoning or "",
+                    "box_number": meta.get("box_number"),
+                    "flags": meta.get("flags") or [],
                     "blocked_input_vat": bool(meta.get("blocked_input_vat", False)),
                     "blocked_reason": meta.get("blocked_reason"),
                     "blocked_vat_amount": float(meta.get("blocked_vat_amount", 0.0)),

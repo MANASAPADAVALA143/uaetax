@@ -33,25 +33,56 @@ if "sqlite" in os.getenv("DATABASE_URL", "sqlite"):
     Base.metadata.create_all(bind=engine)
 
 # ── Lightweight column migrations (idempotent — safe to run on every deploy) ──
-# Adds source + source_invoice_id to transactions table if not already present.
 def _run_column_migrations():
-    _migrations = [
-        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'vat_classifier'",
-        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL",
-        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS country VARCHAR(50) DEFAULT 'UAE'",
-        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'AED'",
-        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS fiscal_year_start INTEGER DEFAULT 1",
-        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS vat_registered_date DATE",
-        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'starter'",
-        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'",
-    ]
+    is_sqlite = "sqlite" in os.getenv("DATABASE_URL", "sqlite")
+
+    def _existing_columns(conn, table: str) -> set[str]:
+        if is_sqlite:
+            rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+            return {row[1] for row in rows}
+        rows = conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = :table"
+            ),
+            {"table": table},
+        ).fetchall()
+        return {row[0] for row in rows}
+
+    def _add_column(conn, table: str, column: str, ddl: str) -> None:
+        if column in _existing_columns(conn, table):
+            return
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+
     try:
         with engine.connect() as conn:
-            for sql in _migrations:
-                try:
-                    conn.execute(text(sql))
-                except Exception:
-                    pass  # Column already exists or unsupported (SQLite)
+            _add_column(
+                conn,
+                "transactions",
+                "source",
+                "source VARCHAR(50) DEFAULT 'vat_classifier'",
+            )
+            _add_column(
+                conn,
+                "transactions",
+                "source_invoice_id",
+                "source_invoice_id INTEGER",
+            )
+            _add_column(conn, "transactions", "box_number", "box_number INTEGER")
+            flags_type = "TEXT" if is_sqlite else "JSONB"
+            _add_column(conn, "transactions", "classification_flags", f"classification_flags {flags_type}")
+            _add_column(conn, "companies", "country", "country VARCHAR(50) DEFAULT 'UAE'")
+            _add_column(conn, "companies", "currency", "currency VARCHAR(10) DEFAULT 'AED'")
+            _add_column(
+                conn,
+                "companies",
+                "fiscal_year_start",
+                "fiscal_year_start INTEGER DEFAULT 1",
+            )
+            _add_column(conn, "companies", "vat_registered_date", "vat_registered_date DATE")
+            _add_column(conn, "companies", "plan", "plan VARCHAR(50) DEFAULT 'starter'")
+            settings_type = "TEXT DEFAULT '{}'" if is_sqlite else "JSONB DEFAULT '{}'"
+            _add_column(conn, "companies", "settings", f"settings {settings_type}")
             conn.commit()
     except Exception:
         pass  # Don't crash startup if migration fails

@@ -68,6 +68,8 @@ class Transaction(Base):
     vat_amount_aed = Column(Float, default=0.0)
     confidence_score = Column(Float)  # AI confidence score (0-100)
     ai_reasoning = Column(Text)  # AI reasoning text
+    box_number = Column(Integer, nullable=True)  # FTA VAT return box (1-11)
+    classification_flags = Column(JSON, nullable=True)  # Risk flags [{code, icon, label, tooltip}]
     is_verified = Column(Boolean, default=False)  # Manual verification flag
     verification_history = Column(JSON, nullable=True)
     # Source tracking — where did this transaction come from?

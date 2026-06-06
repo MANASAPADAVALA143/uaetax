@@ -136,6 +136,8 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
                       and (t.vat_treatment or "") == "standard_rated"]
     purch_rc       = [t for t in transactions if _transaction_side(t) == "purchase"
                       and (t.vat_treatment or "") == "reverse_charge"]
+    purch_import   = [t for t in transactions if _transaction_side(t) == "purchase"
+                      and (t.vat_treatment or "") == "import_vat"]
     purch_zero     = [t for t in transactions if _transaction_side(t) == "purchase"
                       and (t.vat_treatment or "") == "zero_rated"]
     purch_exempt   = [t for t in transactions if _transaction_side(t) == "purchase"
@@ -157,6 +159,9 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     rc_net = _amt(purch_rc)
     rc_vat = rc_net * 0.05
 
+    import_net = _amt(purch_import)
+    import_vat = import_net * 0.05
+
     # Box 2: Output VAT = standard-rated sales VAT + RC self-assessed output
     box2 = box1 * 0.05 + rc_vat
 
@@ -171,8 +176,8 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     # Box 6: Taxable expenses (standard-rated claimable + reverse-charge net)
     box6 = std_net + rc_net
 
-    # Box 7: Input VAT = std claimable VAT + RC self-assessed input VAT (Art. 48)
-    box7 = std_vat + rc_vat
+    # Box 7: Input VAT = std claimable VAT + RC self-assessed input VAT (Art. 48) + import VAT
+    box7 = std_vat + rc_vat + import_vat
 
     # Box 8: Net VAT payable (+) or refundable (-)
     box8 = box2 - box7

@@ -13,9 +13,20 @@ interface ClassificationResult {
   vat_treatment: string;
   confidence: number;
   reasoning?: string;
+  explanation?: string;
+  box_number?: number;
+  flags?: RiskFlag[];
+  review_tier?: string;
   blocked_input_vat?: boolean;
   blocked_reason?: string;
   blocked_vat_amount?: number;
+}
+
+interface RiskFlag {
+  code: string;
+  icon: string;
+  label: string;
+  tooltip: string;
 }
 
 interface SavedTransaction {
@@ -34,9 +45,18 @@ interface SavedTransaction {
   entertainment_flag?: boolean;
   entertainment_label?: string | null;
   reverse_charge_flag?: boolean;
+  import_vat_flag?: boolean;
   blocked_input_vat?: boolean;
   blocked_vat_amount?: number;
+  blocked_reason?: string | null;
   review_tier?: "auto_approve" | "review_required" | "blocked";
+  box_number?: number;
+  flags?: RiskFlag[];
+  explanation?: string;
+  ai_reasoning?: string;
+  flag_reason?: string | null;
+  transaction_side?: string;
+  location?: string;
 }
 
 type ReviewTab = "auto_approve" | "review_required" | "blocked";
@@ -66,6 +86,7 @@ export default function VATClassifier() {
   const [reviewTab, setReviewTab] = useState<ReviewTab>("auto_approve");
   const [tierCounts, setTierCounts] = useState({ auto_approve: 0, review_required: 0, blocked: 0 });
   const [bulkApproving, setBulkApproving] = useState(false);
+  const [whyModal, setWhyModal] = useState<SavedTransaction | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSaved = useCallback(async () => {
@@ -147,6 +168,10 @@ export default function VATClassifier() {
           vat_treatment: String(c.vat_treatment ?? "standard_rated"),
           confidence: Math.round(Number(c.confidence ?? 0) * 100),
           reasoning: c.reasoning ? String(c.reasoning) : undefined,
+          explanation: c.explanation ? String(c.explanation) : c.reasoning ? String(c.reasoning) : undefined,
+          box_number: typeof c.box_number === "number" ? c.box_number : undefined,
+          flags: Array.isArray(c.flags) ? (c.flags as RiskFlag[]) : [],
+          review_tier: c.review_tier ? String(c.review_tier) : undefined,
           blocked_input_vat: Boolean(c.blocked_input_vat),
           blocked_reason: c.blocked_reason ? String(c.blocked_reason) : undefined,
           blocked_vat_amount: typeof c.blocked_vat_amount === "number" ? c.blocked_vat_amount : 0,
@@ -218,6 +243,7 @@ export default function VATClassifier() {
     switch (treatment) {
       case "standard_rated":
       case "reverse_charge":
+      case "import_vat":
         return "pill-std";
       case "zero_rated":
         return "pill-zero";
@@ -239,7 +265,27 @@ export default function VATClassifier() {
     zero_rated: "bg-[rgba(78,168,255,0.1)] text-blue-300 border-blue-400/30",
     exempt: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
     reverse_charge: "bg-[rgba(200,100,255,0.12)] text-purple-300 border-purple-400/30",
+    import_vat: "bg-[rgba(78,168,255,0.12)] text-blue-300 border-blue-400/30",
     out_of_scope: "bg-[rgba(255,255,255,0.06)] text-muted border-border",
+  };
+
+  const renderFlags = (flags?: RiskFlag[]) => {
+    if (!flags || flags.length === 0) {
+      return <span className="text-muted2" title="No risk flags">⚪</span>;
+    }
+    return (
+      <div className="flex flex-wrap gap-1">
+        {flags.map((f) => (
+          <span
+            key={f.code}
+            title={f.tooltip}
+            className="cursor-help text-[13px] leading-none"
+          >
+            {f.icon}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   const totalSales = savedTxns.filter(t => t.transaction_type === "sale").reduce((s, t) => s + t.amount_aed, 0);
@@ -422,7 +468,7 @@ export default function VATClassifier() {
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="border-b border-border bg-[rgba(4,12,30,0.6)]">
-                    {["Date", "Description", "Vendor/Customer", "Type", "VAT Treatment", "Flags", "Conf.", "Amount AED", "VAT AED"].map(h => (
+                    {["Date", "Description", "Vendor/Customer", "Type", "VAT Treatment", "Box", "Flags", "Conf.", "Amount AED", "VAT AED", ""].map(h => (
                       <th key={h} className="text-left px-4 py-2.5 text-muted2 uppercase tracking-wide text-[10px] font-mono whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -451,24 +497,27 @@ export default function VATClassifier() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-mono ${VAT_COLORS[t.vat_treatment] || VAT_COLORS.out_of_scope}`}>
-                          {(t.vat_treatment || "—").replace(/_/g, " ")}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-mono ${VAT_COLORS[t.vat_treatment] || VAT_COLORS.out_of_scope}`}>
+                            {(t.vat_treatment || "—").replace(/_/g, " ")}
+                          </span>
+                          {t.entertainment_flag && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[rgba(255,183,0,0.15)] text-amber border border-amber/30">
+                              Art.54 — 50% recovery
+                            </span>
+                          )}
+                          {t.import_vat_flag && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[rgba(78,168,255,0.12)] text-blue-300 border border-blue-400/20">
+                              Import VAT
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted2">
+                        {t.box_number ?? "—"}
                       </td>
                       <td className="px-4 py-2.5">
-                        <div className="flex flex-col gap-1">
-                          {t.entertainment_flag && (
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[rgba(255,183,0,0.15)] text-amber border border-amber/30" title={t.entertainment_label || ""}>
-                              Art.54 · 50% blocked
-                            </span>
-                          )}
-                          {t.reverse_charge_flag && (
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[rgba(200,100,255,0.12)] text-purple-300 border border-purple-400/20">
-                              Reverse charge
-                            </span>
-                          )}
-                          {!t.entertainment_flag && !t.reverse_charge_flag && <span className="text-muted2">—</span>}
-                        </div>
+                        {renderFlags(t.flags)}
                       </td>
                       <td className="px-4 py-2.5 font-mono text-[11px] text-right whitespace-nowrap">
                         <span className={
@@ -480,6 +529,15 @@ export default function VATClassifier() {
                       </td>
                       <td className="px-4 py-2.5 text-white font-mono text-right whitespace-nowrap">{t.amount_aed.toLocaleString("en-AE", {minimumFractionDigits: 2})}</td>
                       <td className="px-4 py-2.5 text-muted font-mono text-right whitespace-nowrap">{(t.vat_amount_aed || 0).toLocaleString("en-AE", {minimumFractionDigits: 2})}</td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setWhyModal(t)}
+                          className="text-[10px] font-mono px-2 py-1 rounded border border-border-g text-gold-lt hover:bg-gold-pale transition-all"
+                        >
+                          Why?
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -627,10 +685,10 @@ export default function VATClassifier() {
                         </span>
                         {result.blocked_input_vat && (
                           <span
-                            title={result.blocked_reason || "Art.53(1)(b) — input VAT not recoverable"}
+                            title={result.blocked_reason || "UAE VAT Art.54 — 50% input VAT recovery only"}
                             className="inline-block px-2 py-0.5 rounded text-[9px] font-bold font-mono tracking-wide whitespace-nowrap bg-[rgba(255,183,0,0.15)] text-amber border border-amber/30"
                           >
-                            ⚠ BLOCKED (Art.53)
+                            Art.54 — 50% recovery
                           </span>
                         )}
                       </div>
@@ -664,6 +722,33 @@ export default function VATClassifier() {
         </div>
       )}
       </>)}
+
+      {whyModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setWhyModal(null)}
+        >
+          <div
+            className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl max-w-lg w-full p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Classification Reasoning</h3>
+              <button
+                type="button"
+                onClick={() => setWhyModal(null)}
+                className="text-muted hover:text-white text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-[12px] text-muted mb-3 font-mono truncate">{whyModal.description}</p>
+            <pre className="text-[12px] text-white whitespace-pre-wrap font-sans leading-relaxed bg-[rgba(4,12,30,0.6)] rounded-lg p-4 border border-border">
+              {whyModal.explanation || whyModal.ai_reasoning || "No explanation available."}
+            </pre>
+          </div>
+        </div>
+      )}
     </>
   );
 }
