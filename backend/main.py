@@ -38,6 +38,12 @@ def _run_column_migrations():
     _migrations = [
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'vat_classifier'",
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL",
+        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS country VARCHAR(50) DEFAULT 'UAE'",
+        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'AED'",
+        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS fiscal_year_start INTEGER DEFAULT 1",
+        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS vat_registered_date DATE",
+        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan VARCHAR(50) DEFAULT 'starter'",
+        "ALTER TABLE companies ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'",
     ]
     try:
         with engine.connect() as conn:

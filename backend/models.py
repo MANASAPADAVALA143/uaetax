@@ -22,6 +22,12 @@ class Company(Base):
     ct_registered = Column(Boolean, default=False)  # Corporate Tax registered
     annual_revenue_aed = Column(Float, nullable=True)
     asp_appointed = Column(Boolean, default=False)
+    country = Column(String(50), default="UAE", nullable=True)
+    currency = Column(String(10), default="AED", nullable=True)
+    fiscal_year_start = Column(Integer, default=1, nullable=True)
+    vat_registered_date = Column(Date, nullable=True)
+    plan = Column(String(50), default="starter", nullable=True)
+    settings = Column(JSON, nullable=True, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     transactions = relationship("Transaction", back_populates="company")
