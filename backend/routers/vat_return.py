@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, case
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, ConfigDict
 import pandas as pd
 import json
 import io
@@ -54,6 +54,8 @@ class GenerateReturnRequest(BaseModel):
 
 
 class VATReturnResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     return_id: int
     company_id: int
     period_start: date
@@ -66,6 +68,9 @@ class VATReturnResponse(BaseModel):
     box6_taxable_expenses: float
     box7_vat_on_expenses: float
     box8_vat_payable_or_refundable: float
+    box9_standard_rated_purchases: Optional[float] = 0.0
+    box10_zero_rated_purchases: Optional[float] = 0.0
+    box11_exempt_purchases: Optional[float] = 0.0
     status: str
     created_at: datetime
 
@@ -131,6 +136,10 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
                       and (t.vat_treatment or "") == "standard_rated"]
     purch_rc       = [t for t in transactions if _transaction_side(t) == "purchase"
                       and (t.vat_treatment or "") == "reverse_charge"]
+    purch_zero     = [t for t in transactions if _transaction_side(t) == "purchase"
+                      and (t.vat_treatment or "") == "zero_rated"]
+    purch_exempt   = [t for t in transactions if _transaction_side(t) == "purchase"
+                      and (t.vat_treatment or "") == "exempt"]
 
     # Art.53(1)(b): split standard-rated purchases into claimable vs blocked
     purch_std_entertainment = [t for t in _purch_std_all if _is_entertainment(t)]
@@ -168,6 +177,11 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     # Box 8: Net VAT payable (+) or refundable (-)
     box8 = box2 - box7
 
+    # Boxes 9-11: Purchase side breakdown (verified classified purchases)
+    box9 = _amt(purch_std) + _amt(purch_std_entertainment)  # all standard-rated purchases
+    box10 = _amt(purch_zero)
+    box11 = _amt(purch_exempt)
+
     return {
         "box1_standard_rated_supplies": round(box1, 2),
         "box2_vat_on_supplies":         round(box2, 2),
@@ -177,6 +191,9 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
         "box6_taxable_expenses":        round(box6, 2),
         "box7_vat_on_expenses":         round(box7, 2),
         "box8_vat_payable_or_refundable": round(box8, 2),
+        "box9_standard_rated_purchases": round(box9, 2),
+        "box10_zero_rated_purchases": round(box10, 2),
+        "box11_exempt_purchases": round(box11, 2),
         # Extra metadata for UI tooltips
         "_rc_net_aed":               round(rc_net, 2),
         "_rc_vat_aed":               round(rc_vat, 2),
@@ -442,8 +459,17 @@ async def generate_return(
     
     # Calculate VAT return boxes
     box_values = calculate_vat_return_boxes(transactions)
-    # Separate DB columns (box1-8) from UI-only metadata (keys prefixed with _)
-    db_box_values   = {k: v for k, v in box_values.items() if not k.startswith("_")}
+    _PURCHASE_BOX_KEYS = (
+        "box9_standard_rated_purchases",
+        "box10_zero_rated_purchases",
+        "box11_exempt_purchases",
+    )
+    # Separate DB columns (box1-8) from UI-only metadata and purchase boxes 9-11
+    db_box_values = {
+        k: v for k, v in box_values.items()
+        if not k.startswith("_") and k not in _PURCHASE_BOX_KEYS
+    }
+    purchase_box_values = {k: v for k, v in box_values.items() if k in _PURCHASE_BOX_KEYS}
     meta_box_values = {k: v for k, v in box_values.items() if k.startswith("_")}
 
     # Check if return already exists
@@ -490,6 +516,7 @@ async def generate_return(
         "period_start": vat_return.period_start,
         "period_end": vat_return.period_end,
         **db_box_values,   # box1-8 from DB record
+        **purchase_box_values,  # box9-11 auto-populated from verified purchases
         **meta_box_values, # _rc_net_aed, _entertainment_blocked_* etc. for UI
         "status": vat_return.status,
         "created_at": vat_return.created_at,

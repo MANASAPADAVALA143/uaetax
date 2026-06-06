@@ -29,9 +29,17 @@ interface SavedTransaction {
   vat_amount_aed: number;
   confidence_score?: number;
   is_verified: boolean;
-  source?: string;         // "vat_classifier" | "invoice_flow_auto" | "invoice_flow_reviewed"
+  source?: string;
   source_invoice_id?: number | null;
+  entertainment_flag?: boolean;
+  entertainment_label?: string | null;
+  reverse_charge_flag?: boolean;
+  blocked_input_vat?: boolean;
+  blocked_vat_amount?: number;
+  review_tier?: "auto_approve" | "review_required" | "blocked";
 }
+
+type ReviewTab = "auto_approve" | "review_required" | "blocked";
 
 type SourceFilter = "all" | "vat_classifier" | "invoice_flow_auto" | "invoice_flow_reviewed";
 
@@ -55,15 +63,24 @@ export default function VATClassifier() {
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassifyMsg, setReclassifyMsg] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [reviewTab, setReviewTab] = useState<ReviewTab>("auto_approve");
+  const [tierCounts, setTierCounts] = useState({ auto_approve: 0, review_required: 0, blocked: 0 });
+  const [bulkApproving, setBulkApproving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSaved = useCallback(async () => {
     setLoadingSaved(true);
     try {
-      const { data } = await apiClient.get("/api/vat/transactions?limit=200");
-      setSavedTxns(Array.isArray(data) ? data : []);
+      const { data } = await apiClient.get("/api/vat/transactions/enriched?limit=200");
+      setSavedTxns(Array.isArray(data.transactions) ? data.transactions : []);
+      setTierCounts(data.tier_counts || { auto_approve: 0, review_required: 0, blocked: 0 });
     } catch {
-      setSavedTxns([]);
+      try {
+        const { data } = await apiClient.get("/api/vat/transactions?limit=200");
+        setSavedTxns(Array.isArray(data) ? data : []);
+      } catch {
+        setSavedTxns([]);
+      }
     } finally {
       setLoadingSaved(false);
     }
@@ -164,6 +181,24 @@ export default function VATClassifier() {
     }
   };
 
+  const handleBulkApprove = async () => {
+    if (!window.confirm("Approve all high-confidence transactions (≥ 85%)? Blocked/entertainment items will be skipped.")) return;
+    setBulkApproving(true);
+    try {
+      const { data } = await apiClient.post("/api/vat/transactions/bulk-approve-high-confidence", {
+        min_confidence: 0.85,
+        verified_by: "user",
+      });
+      setUploadMsg(`✅ Approved ${data.approved_count} transaction(s)${data.skipped_blocked ? ` · ${data.skipped_blocked} blocked skipped` : ""}.`);
+      await fetchSaved();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : "Bulk approve failed");
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
   const handleClearAll = async () => {
     if (!window.confirm(`Delete ALL ${savedTxns.length} transactions? This cannot be undone.`)) return;
     setClearing(true);
@@ -212,9 +247,11 @@ export default function VATClassifier() {
   const totalVAT = savedTxns.reduce((s, t) => s + (t.vat_amount_aed || 0), 0);
 
   // Source-filtered view
-  const filteredTxns = sourceFilter === "all"
+  const sourceFiltered = sourceFilter === "all"
     ? savedTxns
     : savedTxns.filter(t => (t.source || "vat_classifier") === sourceFilter);
+
+  const filteredTxns = sourceFiltered.filter(t => (t.review_tier || "review_required") === reviewTab);
 
   // Source counts for pill badges
   const sourceCounts: Record<SourceFilter, number> = {
@@ -310,7 +347,16 @@ export default function VATClassifier() {
               ))}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[10px] text-muted2 font-mono uppercase">Auto-verified · Ready for VAT Return</span>
+              <button
+                type="button"
+                onClick={handleBulkApprove}
+                disabled={bulkApproving || tierCounts.auto_approve === 0}
+                className="px-3 py-1 rounded-[6px] text-[11px] font-medium border border-green/30 text-green hover:bg-[rgba(45,212,160,0.1)] disabled:opacity-50 transition-all"
+                title="Approve all transactions with confidence ≥ 85% (excludes blocked)"
+              >
+                {bulkApproving ? "Approving…" : "✓ Bulk Approve (≥85%)"}
+              </button>
+              <span className="text-[10px] text-muted2 font-mono uppercase">Ready for VAT Return when verified</span>
               {savedTxns.length > 0 && (
                 <button
                   type="button"
@@ -334,6 +380,30 @@ export default function VATClassifier() {
               )}
             </div>
           </div>
+
+          {/* Review tier tabs */}
+          <div className="px-6 py-3 border-b border-border flex flex-wrap gap-2">
+            {([
+              { key: "auto_approve" as ReviewTab, label: "Auto-Approve", color: "text-green" },
+              { key: "review_required" as ReviewTab, label: "Review Required", color: "text-amber" },
+              { key: "blocked" as ReviewTab, label: "Blocked", color: "text-red" },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setReviewTab(tab.key)}
+                className={`px-3 py-1.5 rounded-[8px] text-[12px] font-medium border transition-all ${
+                  reviewTab === tab.key
+                    ? "bg-gold-pale text-gold-lt border-border-g"
+                    : "text-muted border-border hover:border-border-g"
+                }`}
+              >
+                {tab.label}
+                <span className={`ml-1.5 font-mono ${tab.color}`}>{tierCounts[tab.key] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+
           {loadingSaved ? (
             <div className="text-center py-12 text-muted2">Loading transactions…</div>
           ) : filteredTxns.length === 0 ? (
@@ -341,7 +411,7 @@ export default function VATClassifier() {
               <div className="text-4xl mb-3">📂</div>
               {savedTxns.length === 0
                 ? <p>No transactions yet — upload your first file</p>
-                : <p>No transactions match this filter</p>
+                : <p>No transactions in this review tier{sourceFilter !== "all" ? " / filter" : ""}</p>
               }
               {savedTxns.length === 0 && (
                 <button type="button" onClick={() => setActiveView("new")} className="mt-2 text-gold-lt text-sm hover:underline">Upload CSV/Excel →</button>
@@ -352,7 +422,7 @@ export default function VATClassifier() {
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="border-b border-border bg-[rgba(4,12,30,0.6)]">
-                    {["Date", "Description", "Vendor/Customer", "Type", "VAT Treatment", "Amount AED", "VAT AED"].map(h => (
+                    {["Date", "Description", "Vendor/Customer", "Type", "VAT Treatment", "Flags", "Conf.", "Amount AED", "VAT AED"].map(h => (
                       <th key={h} className="text-left px-4 py-2.5 text-muted2 uppercase tracking-wide text-[10px] font-mono whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -383,6 +453,29 @@ export default function VATClassifier() {
                       <td className="px-4 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full border text-[10px] font-mono ${VAT_COLORS[t.vat_treatment] || VAT_COLORS.out_of_scope}`}>
                           {(t.vat_treatment || "—").replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-col gap-1">
+                          {t.entertainment_flag && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[rgba(255,183,0,0.15)] text-amber border border-amber/30" title={t.entertainment_label || ""}>
+                              Art.54 · 50% blocked
+                            </span>
+                          )}
+                          {t.reverse_charge_flag && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[rgba(200,100,255,0.12)] text-purple-300 border border-purple-400/20">
+                              Reverse charge
+                            </span>
+                          )}
+                          {!t.entertainment_flag && !t.reverse_charge_flag && <span className="text-muted2">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-right whitespace-nowrap">
+                        <span className={
+                          (t.confidence_score ?? 0) >= 85 ? "text-green" :
+                          (t.confidence_score ?? 0) >= 70 ? "text-amber" : "text-red"
+                        }>
+                          {Math.round(t.confidence_score ?? 0)}%
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-white font-mono text-right whitespace-nowrap">{t.amount_aed.toLocaleString("en-AE", {minimumFractionDigits: 2})}</td>

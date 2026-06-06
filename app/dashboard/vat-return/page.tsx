@@ -50,6 +50,9 @@ interface BoxState {
   box6_taxable_expenses: number;
   box7_vat_on_expenses: number;
   box8_vat_payable_or_refundable: number;
+  box9_standard_rated_purchases: number;
+  box10_zero_rated_purchases: number;
+  box11_exempt_purchases: number;
 }
 
 interface RCMeta {
@@ -71,6 +74,9 @@ const ZERO_BOXES: BoxState = {
   box6_taxable_expenses: 0,
   box7_vat_on_expenses: 0,
   box8_vat_payable_or_refundable: 0,
+  box9_standard_rated_purchases: 0,
+  box10_zero_rated_purchases: 0,
+  box11_exempt_purchases: 0,
 };
 
 const BOX_META: { key: keyof BoxState; n: number; title: string }[] = [
@@ -82,6 +88,9 @@ const BOX_META: { key: keyof BoxState; n: number; title: string }[] = [
   { n: 6, key: "box6_taxable_expenses", title: "Taxable expenses" },
   { n: 7, key: "box7_vat_on_expenses", title: "VAT on expenses (5%)" },
   { n: 8, key: "box8_vat_payable_or_refundable", title: "VAT payable / (refundable)" },
+  { n: 9, key: "box9_standard_rated_purchases", title: "Standard rated purchases" },
+  { n: 10, key: "box10_zero_rated_purchases", title: "Zero rated purchases" },
+  { n: 11, key: "box11_exempt_purchases", title: "Exempt purchases" },
 ];
 
 function fmtAed(n: number): string {
@@ -128,6 +137,9 @@ export default function VATReturnPage() {
         box6_taxable_expenses: Number(data.box6_taxable_expenses) || 0,
         box7_vat_on_expenses: Number(data.box7_vat_on_expenses) || 0,
         box8_vat_payable_or_refundable: Number(data.box8_vat_payable_or_refundable) || 0,
+        box9_standard_rated_purchases: Number(data.box9_standard_rated_purchases) || 0,
+        box10_zero_rated_purchases: Number(data.box10_zero_rated_purchases) || 0,
+        box11_exempt_purchases: Number(data.box11_exempt_purchases) || 0,
       });
       const rcNet = Number(data._rc_net_aed) || 0;
       const rcVat = Number(data._rc_vat_aed) || 0;
@@ -195,9 +207,9 @@ export default function VATReturnPage() {
           <div className="font-mono text-[11px] text-gold uppercase tracking-[0.1em] mb-1.5">
             // VAT Return
           </div>
-          <h2 className="font-playfair text-[26px] font-bold">FTA VAT return (8 boxes)</h2>
+          <h2 className="font-playfair text-[26px] font-bold">FTA VAT return (11 boxes)</h2>
           <p className="text-[13px] text-muted mt-1">
-            Verified transactions in period · live API
+            Verified transactions in period · boxes 9–11 auto-populated from purchases
           </p>
         </div>
       </div>
@@ -314,6 +326,11 @@ export default function VATReturnPage() {
             {b.n === 7 && entertainmentMeta && entertainmentMeta.blocked_vat_aed > 0 && (
               <div className="text-[10px] text-amber/70 font-mono mt-0.5">
                 Excl. {fmtAed(entertainmentMeta.blocked_vat_aed)} blocked VAT on entertainment (Art. 53)
+              </div>
+            )}
+            {b.n >= 9 && (
+              <div className="text-[10px] text-blue-300/70 font-mono mt-0.5">
+                Auto-populated from verified purchase classifications
               </div>
             )}
           </div>

@@ -16,6 +16,7 @@ from middleware.auth import get_current_company_id
 
 # pgvector-backed RAG service — import never fails; returns [] on any error
 from services.uae_tax_rag_pg import uae_tax_rag  # type: ignore
+from services.vat_enrichment import apply_post_classification_rules, enrich_transaction_row
 
 from database import get_db
 from models import Transaction, Company, AuditLog
@@ -95,6 +96,11 @@ class PatchVerifyTransactionRequest(BaseModel):
 class BulkVerifyRequest(BaseModel):
     transaction_ids: List[int] = Field(..., min_length=1)
     verified_by: str = Field(..., min_length=1)
+
+
+class BulkApproveHighConfidenceRequest(BaseModel):
+    min_confidence: float = Field(0.85, ge=0, le=1, description="Minimum confidence 0-1 scale")
+    verified_by: str = Field("user", min_length=1)
 
 
 def _vat_amount_for_treatment(amount_aed: float, treatment: Optional[str]) -> float:
@@ -255,7 +261,7 @@ Return JSON only:
         blocked_reason = result.get("blocked_reason")
         blocked_vat_amount = float(result.get("blocked_vat_amount", 0.0))
 
-        return {
+        normalized = {
             "vat_treatment": vat_treatment,
             "vat_rate": vat_rate,
             "vat_amount_aed": vat_amount_aed,
@@ -269,6 +275,12 @@ Return JSON only:
             "rag_citations": rag_citations,
             "uae_law_sources": rag_sources,
         }
+        return apply_post_classification_rules(
+            normalized,
+            description=description,
+            vendor_or_customer=vendor_or_customer,
+            transaction_type=transaction_type,
+        )
 
     except json.JSONDecodeError as e:
         print(f"JSON decode error: {e}")
@@ -768,6 +780,75 @@ async def get_transactions(
     transactions = query.order_by(Transaction.date.desc()).all()
     
     return transactions
+
+
+@router.get("/transactions/enriched")
+async def get_transactions_enriched(
+    limit: int = Query(200, ge=1, le=1000),
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Transactions with entertainment, reverse charge, and review tier flags."""
+    rows = (
+        db.query(Transaction)
+        .filter(Transaction.company_id == company_id)
+        .order_by(Transaction.date.desc())
+        .limit(limit)
+        .all()
+    )
+    enriched = [enrich_transaction_row(t) for t in rows]
+    tiers = {"auto_approve": 0, "review_required": 0, "blocked": 0}
+    for e in enriched:
+        tiers[e["review_tier"]] = tiers.get(e["review_tier"], 0) + 1
+    return {"transactions": enriched, "tier_counts": tiers}
+
+
+@router.post("/transactions/bulk-approve-high-confidence")
+async def bulk_approve_high_confidence(
+    body: BulkApproveHighConfidenceRequest,
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Approve all unverified transactions with confidence >= threshold (default 0.85)."""
+    threshold_pct = body.min_confidence * 100
+    rows = (
+        db.query(Transaction)
+        .filter(
+            Transaction.company_id == company_id,
+            Transaction.is_verified == False,  # noqa: E712
+            Transaction.confidence_score >= threshold_pct,
+        )
+        .all()
+    )
+    approved = 0
+    skipped_blocked = 0
+    for t in rows:
+        enriched = enrich_transaction_row(t, threshold_0_100=threshold_pct)
+        if enriched["review_tier"] == "blocked":
+            skipped_blocked += 1
+            continue
+        t.is_verified = True
+        _append_verification_history(
+            t,
+            {"type": "bulk_approve_high_confidence", "min_confidence": body.min_confidence, "verified_by": body.verified_by},
+        )
+        approved += 1
+
+    if approved:
+        db.add(
+            AuditLog(
+                company_id=company_id,
+                actor=body.verified_by,
+                action="bulk_approve_high_confidence",
+                entity=f"{approved} transactions",
+            )
+        )
+    db.commit()
+    return {
+        "approved_count": approved,
+        "skipped_blocked": skipped_blocked,
+        "min_confidence": body.min_confidence,
+    }
 
 
 @router.delete("/transactions/all")

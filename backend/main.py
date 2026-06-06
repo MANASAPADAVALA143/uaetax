@@ -21,6 +21,7 @@ from routers import fta_reports
 from routers.auth_router import router as auth_router
 from routers.einvoicing import router as einvoicing_router
 from routers.corporatetax_routes import router as corporatetax_spec_router
+from routers.trn_validator import router as trn_validator_router
 
 # Load repo-root .env only in local dev — Railway injects env vars directly
 _env_file = Path(__file__).resolve().parent.parent / ".env"
@@ -68,6 +69,7 @@ app.include_router(invoice_flow.router)  # prefix="/api/invoice" defined in rout
 app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
 app.include_router(einvoicing_router)
 app.include_router(corporatetax_spec_router)
+app.include_router(trn_validator_router)
 
 # CORS — hardcoded origins + regex fallback for any *.vercel.app deployment
 # No env-var override so Railway can never accidentally break this
