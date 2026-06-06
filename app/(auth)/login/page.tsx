@@ -5,16 +5,19 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import CompanyPickerModal from "@/components/CompanyPickerModal";
+import type { CompanyInfo } from "@/context/AuthContext";
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const { refreshCompanies } = useAuth();
+  const { refreshCompanies, setActiveCompany, companies } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickerCompanies, setPickerCompanies] = useState<CompanyInfo[] | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,14 +30,41 @@ function LoginForm() {
     });
 
     if (authError) {
-      setError(authError.message);
+      setError("Invalid email or password");
       setLoading(false);
       return;
     }
 
-    // Load companies so AuthContext / apiClient are ready before redirect
     await refreshCompanies();
 
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    let list: CompanyInfo[] = [];
+    if (token) {
+      try {
+        const res = await fetch(`${apiUrl}/api/auth/my-companies`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) list = await res.json();
+      } catch {
+        list = companies;
+      }
+    }
+
+    if (list.length > 1) {
+      setPickerCompanies(list);
+      setLoading(false);
+      return;
+    }
+
+    const next = params.get("next") || "/dashboard";
+    router.push(next);
+  };
+
+  const onCompanyPicked = (company: CompanyInfo) => {
+    setActiveCompany(company);
+    setPickerCompanies(null);
     const next = params.get("next") || "/dashboard";
     router.push(next);
   };
@@ -123,14 +153,14 @@ function LoginForm() {
               disabled={loading}
               className="w-full py-3 rounded-[10px] text-sm font-semibold bg-gradient-to-br from-gold to-gold-lt text-deep shadow-[0_4px_18px_rgba(201,168,76,0.38)] hover:shadow-[0_6px_24px_rgba(201,168,76,0.52)] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 mt-2"
             >
-              {loading ? "Signing in…" : "Sign in →"}
+              {loading ? "Signing in…" : "Sign In"}
             </button>
           </form>
 
           <p className="text-center text-[13px] text-muted mt-6">
-            New to GulfTax AI?{" "}
-            <Link href="/register" className="text-gold-lt hover:text-gold transition-colors">
-              Create account
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="text-gold-lt hover:text-gold transition-colors">
+              Sign up
             </Link>
           </p>
         </div>
@@ -139,6 +169,9 @@ function LoginForm() {
           Secured with Supabase Auth · Data stays in your company workspace
         </p>
       </div>
+      {pickerCompanies && (
+        <CompanyPickerModal companies={pickerCompanies} onSelect={onCompanyPicked} />
+      )}
     </div>
   );
 }

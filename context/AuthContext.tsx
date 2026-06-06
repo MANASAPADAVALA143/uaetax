@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { supabase, COMPANY_ID_KEY, setCompanyId } from "@/lib/supabase";
 import { setApiAuth } from "@/lib/api";
 
 // ── Types ──────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ const AuthContext = createContext<AuthState>({
   refreshCompanies: async () => {},
 });
 
-const ACTIVE_COMPANY_KEY = "gulftax_active_company_id";
+const ACTIVE_COMPANY_KEY = COMPANY_ID_KEY;
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const LOCAL_DEV = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
 
@@ -91,9 +91,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (saved) {
         const id = parseInt(saved, 10);
         const match = list.find((c) => c.company_id === id);
-        if (match) return match;
+        if (match) {
+          setCompanyId(match.company_id);
+          return match;
+        }
       }
-      return list[0];
+      const first = list[0];
+      if (first) setCompanyId(first.company_id);
+      return first;
     },
     []
   );
@@ -114,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setActiveCompany = useCallback(
     (company: CompanyInfo) => {
       setActiveCompanyState(company);
+      setCompanyId(company.company_id);
       localStorage.setItem(ACTIVE_COMPANY_KEY, String(company.company_id));
       setApiAuth(session?.access_token ?? null, company.company_id);
     },
@@ -128,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveCompanyState(null);
     setApiAuth(null, null);
     localStorage.removeItem(ACTIVE_COMPANY_KEY);
+    setCompanyId(null);
     window.location.href = "/login";
   }, []);
 

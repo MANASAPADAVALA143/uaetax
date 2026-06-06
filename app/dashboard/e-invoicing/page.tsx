@@ -204,8 +204,9 @@ export default function EInvoicingPage() {
   };
 
   useEffect(() => {
+    if (!companyId) return;
     fetchAssessments();
-  }, []);
+  }, [companyId]);
 
   const onRequestAssessment = async () => {
     setIsTriggering(true);

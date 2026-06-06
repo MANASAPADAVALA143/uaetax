@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/register", "/", "/api"];
+const PUBLIC_PATHS = ["/login", "/signup", "/register", "/", "/api"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,12 +20,9 @@ export function middleware(request: NextRequest) {
   );
   if (isPublic) return NextResponse.next();
 
-  // Only gate /dashboard and any other private paths
+  // Protect /dashboard/* — redirect to login if no Supabase session cookie
   if (!pathname.startsWith("/dashboard")) return NextResponse.next();
 
-  // Supabase stores the session in cookies named sb-<project-ref>-auth-token
-  // Newer Supabase JS client uses chunked cookies: sb-xxx-auth-token.0, .1 etc.
-  // We use includes("-auth-token") to match both old and new formats.
   const cookies = request.cookies.getAll();
   const hasSession = cookies.some(
     (c) =>
@@ -33,12 +30,12 @@ export function middleware(request: NextRequest) {
       c.name === "supabase-auth-token"
   );
 
-  // Auth gate temporarily disabled for demo access
-  // if (!hasSession) {
-  //   const loginUrl = new URL("/login", request.url);
-  //   loginUrl.searchParams.set("next", pathname);
-  //   return NextResponse.redirect(loginUrl);
-  // }
+  const isLocalDev = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
+  if (!hasSession && !isLocalDev) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 
   return NextResponse.next();
 }

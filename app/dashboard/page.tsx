@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
-import { useCompanyId } from "@/hooks/useAuth";
+import { useAuth, useCompanyId } from "@/hooks/useAuth";
 
 interface DashboardSummary {
   current_period: {
@@ -89,6 +89,7 @@ function KpiSkeleton() {
 }
 
 export default function DashboardOverview() {
+  const { activeCompany } = useAuth();
   const companyId = useCompanyId();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -242,9 +243,11 @@ export default function DashboardOverview() {
           <div className="font-mono text-[11px] text-gold uppercase tracking-[0.1em] mb-1.5">
             // Dashboard Overview
           </div>
-          <h2 className="font-playfair text-[26px] font-bold">Al Baraka Trading LLC</h2>
+          <h2 className="font-playfair text-[26px] font-bold">
+            {activeCompany?.company_name ?? "Your Company"}
+          </h2>
           <div className="text-[13px] text-muted mt-1">
-            TRN: 100123456700003 · Mainland ·{" "}
+            TRN: {activeCompany?.trn ?? "—"} · {activeCompany?.entity_type ?? "—"} ·{" "}
             {loadState === "loading" ? (
               <span className="inline-block h-3 w-40 bg-[rgba(78,168,255,0.12)] rounded align-middle animate-pulse" />
             ) : loadState === "error" ? (
