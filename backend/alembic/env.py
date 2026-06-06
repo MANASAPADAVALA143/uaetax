@@ -43,9 +43,9 @@ def get_url():
 
     from dotenv import load_dotenv
 
-    # Always load backend/.env (not cwd), so `alembic` works from any directory.
-    backend_root = Path(__file__).resolve().parent.parent
-    load_dotenv(backend_root / ".env", override=True)
+    # Load repo-root .env (single GulfTax .env for frontend + backend).
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    load_dotenv(repo_root / ".env", override=True)
     return os.getenv("DATABASE_URL", "sqlite:///./gulftax.db")
 
 

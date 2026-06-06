@@ -7,8 +7,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Load backend/.env regardless of process cwd (e.g. uvicorn run from repo root).
-load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+# Load repo-root .env (GulfTax standalone — single .env for frontend + backend).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./gulftax.db")
 
