@@ -133,7 +133,7 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
                   and (t.vat_treatment or "") == "exempt"]
 
     _purch_std_all = [t for t in transactions if _transaction_side(t) == "purchase"
-                      and (t.vat_treatment or "") == "standard_rated"]
+                      and (t.vat_treatment or "") in ("standard_rated", "entertainment_restricted")]
     purch_rc       = [t for t in transactions if _transaction_side(t) == "purchase"
                       and (t.vat_treatment or "") == "reverse_charge"]
     purch_import   = [t for t in transactions if _transaction_side(t) == "purchase"

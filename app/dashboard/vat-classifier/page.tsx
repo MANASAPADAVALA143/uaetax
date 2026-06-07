@@ -133,7 +133,7 @@ export default function VATClassifier() {
       formData.append("file", file);
 
       const response = await apiClient.post(
-        `/api/vat/classify-bulk?entity_type=mainland&transaction_type=sale`,
+        `/api/vat/classify-bulk?entity_type=mainland`,
         formData,
         {
           headers: {
@@ -266,6 +266,7 @@ export default function VATClassifier() {
     exempt: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
     reverse_charge: "bg-[rgba(200,100,255,0.12)] text-purple-300 border-purple-400/30",
     import_vat: "bg-[rgba(78,168,255,0.12)] text-blue-300 border-blue-400/30",
+    entertainment_restricted: "bg-[rgba(255,183,0,0.12)] text-amber border-amber/30",
     out_of_scope: "bg-[rgba(255,255,255,0.06)] text-muted border-border",
   };
 
@@ -492,7 +493,7 @@ export default function VATClassifier() {
                       </td>
                       <td className="px-4 py-2.5 text-muted truncate max-w-[140px]">{t.vendor_or_customer || "—"}</td>
                       <td className="px-4 py-2.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase ${t.transaction_type === "sale" ? "text-green bg-[rgba(45,212,160,0.12)]" : "text-amber bg-[rgba(255,183,0,0.1)]"}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase ${t.transaction_type === "sale" ? "text-green bg-[rgba(45,212,160,0.12)]" : "text-blue-300 bg-[rgba(78,168,255,0.12)] border border-blue-400/20"}`}>
                           {t.transaction_type}
                         </span>
                       </td>

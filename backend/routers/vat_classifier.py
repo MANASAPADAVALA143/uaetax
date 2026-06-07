@@ -105,7 +105,7 @@ class BulkApproveHighConfidenceRequest(BaseModel):
 
 
 def _vat_amount_for_treatment(amount_aed: float, treatment: Optional[str]) -> float:
-    if treatment in ("standard_rated", "reverse_charge", "import_vat"):
+    if treatment in ("standard_rated", "reverse_charge", "import_vat", "entertainment_restricted"):
         return round(float(amount_aed) * 0.05, 2)
     return 0.0
 
@@ -138,6 +138,7 @@ def _save_classification_fields(
         "box_number": classification.get("box_number"),
         "flags": classification.get("flags") or [],
         "review_tier": classification.get("review_tier", "review_required"),
+        "transaction_side": classification.get("transaction_side") or classification.get("transaction_type_resolved", "purchase"),
         "entertainment_flag": bool(classification.get("entertainment_flag", False)),
         "reverse_charge_flag": bool(classification.get("reverse_charge_flag", False)),
         "import_vat_flag": bool(classification.get("import_vat_flag", False)),
@@ -392,7 +393,7 @@ async def classify_transaction(
         vendor_or_customer=request.vendor_or_customer,
         invoice_number=request.invoice_number,
         vat_treatment=saved["vat_treatment"],
-        transaction_type=request.transaction_type,
+        transaction_type=saved.get("transaction_side", request.transaction_type),
         vat_amount_aed=saved["vat_amount_aed"],
         confidence_score=saved["confidence_score_0_100"],
         ai_reasoning=saved["reasoning"],
@@ -423,7 +424,7 @@ async def classify_transaction(
 def classify_bulk(
     file: UploadFile = File(...),
     entity_type: str = Query("mainland", pattern="^(mainland|free_zone|designated_zone)$"),
-    transaction_type: str = Query("sale", pattern="^(sale|purchase)$"),
+    transaction_type: str = Query("purchase", pattern="^(sale|purchase)$"),
     company_id: int = Depends(get_current_company_id),
     db: Session = Depends(get_db),
 ):
@@ -624,7 +625,7 @@ def classify_bulk(
                 vendor_or_customer=spec["vendor"],
                 invoice_number=spec["invoice_num"],
                 vat_treatment=classification["vat_treatment"],
-                transaction_type=spec["row_tx_type"],
+                transaction_type=classification.get("transaction_side", spec["row_tx_type"]),
                 vat_amount_aed=classification["vat_amount_aed"],
                 confidence_score=classification["confidence_score_0_100"],
                 ai_reasoning=classification["reasoning"],
@@ -648,7 +649,7 @@ def classify_bulk(
                     "needs_review": classification["flag_for_review"],
                     "flag_reason": classification.get("flag_reason"),
                     "review_tier": classification["review_tier"],
-                    "transaction_type": spec["row_tx_type"],
+                    "transaction_type": classification.get("transaction_side", spec["row_tx_type"]),
                 }
             )
             excel_rows.append(excel_row)

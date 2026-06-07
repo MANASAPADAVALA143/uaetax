@@ -127,13 +127,12 @@ def enrich_transaction_row(
     desc = getattr(txn, "description", "") or ""
     vendor = getattr(txn, "vendor_or_customer", None)
     conf = getattr(txn, "confidence_score", None)
-    tx_type = getattr(txn, "transaction_type", None) or "sale"
+    tx_type = getattr(txn, "transaction_type", None) or "purchase"
     amount = float(getattr(txn, "amount_aed", 0) or 0)
     vat_amt = float(getattr(txn, "vat_amount_aed", 0) or 0)
     stored_flags = getattr(txn, "classification_flags", None)
     stored_box = getattr(txn, "box_number", None)
     stored_reasoning = getattr(txn, "ai_reasoning", None)
-    treatment = getattr(txn, "vat_treatment", None) or "standard_rated"
 
     dt = classify_with_decision_tree(
         description=desc,
@@ -142,11 +141,13 @@ def enrich_transaction_row(
         transaction_type=tx_type,
     )
 
+    resolved_side = dt["transaction_side"]
+    treatment = getattr(txn, "vat_treatment", None) or dt["vat_treatment"]
     entertainment = dt["entertainment_flag"]
     rc = dt["reverse_charge_flag"]
     import_vat = dt["import_vat_flag"]
     blocked = entertainment
-    box_number = stored_box if stored_box is not None else map_box_number(treatment, tx_type)
+    box_number = stored_box if stored_box is not None else map_box_number(treatment, resolved_side)
 
     tier = dt["review_tier"]
     if conf is not None and conf < threshold_0_100 and tier == "auto_approve":
@@ -175,7 +176,7 @@ def enrich_transaction_row(
         "vendor_or_customer": vendor,
         "amount_aed": amount,
         "vat_treatment": treatment,
-        "transaction_type": tx_type,
+        "transaction_type": resolved_side,
         "vat_amount_aed": vat_amt,
         "confidence_score": conf if conf is not None else dt["confidence_score"],
         "is_verified": bool(txn.is_verified),
@@ -194,6 +195,6 @@ def enrich_transaction_row(
         "explanation": explanation,
         "ai_reasoning": explanation,
         "flag_reason": dt["flag_reason"],
-        "transaction_side": dt["transaction_side"],
+        "transaction_side": resolved_side,
         "location": dt["location"],
     }

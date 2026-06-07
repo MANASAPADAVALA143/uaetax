@@ -8,21 +8,28 @@ from typing import Any, Dict, List, Optional
 UAE_TRN_RE = re.compile(r"^1\d{14}$")
 
 PURCHASE_KEYWORDS = (
-    "office", "rent", "supplies", "subscription", "hosting", "license", "software",
-    "utilities", "electricity", "water", "internet", "telephone", "courier", "freight",
-    "maintenance", "fuel", "insurance", "printing", "repairs", "equipment", "furniture",
-    "vehicle", "lease", "travel", "hotel", "meals", "entertainment", "import", "materials",
-    "catering", "refreshments", "aws", "google", "microsoft", "adobe", "zoom", "oracle",
-    "meta", "facebook", "netflix", "dhl", "aramex", "etisalat", "dewa", "purchase",
-    "supplier", "invoice from", "salary", "payroll", "retainer", "licence", "license",
-    "furniture", "laptop", "computers", "accounting software", "cloud",
+    "rent", "office", "supplies", "stationery", "stationary", "laptop", "computer",
+    "computers", "equipment", "furniture", "utilities", "electricity", "water",
+    "telephone", "internet", "courier", "delivery", "maintenance", "vehicle", "lease",
+    "fuel", "insurance", "subscription", "hosting", "license", "licence", "software",
+    "travel", "hotel", "meals", "catering", "refreshments", "entertainment", "hospitality",
+    "recreation", "team building", "staff recreation", "import", "materials", "freight",
+    "generator", "membership", "certification", "audit", "consulting", "advisory",
+    "cleaning", "facilities", "marketing", "colocation", "data centre", "datacenter",
+    "payroll", "secretarial", "flight", "cfo travel", "retainer", "cloud", "erp",
+    "aws", "google", "microsoft", "adobe", "zoom", "oracle", "meta", "facebook",
+    "dhl", "aramex", "etisalat", "dewa", "emirates", "flydubai", "carrefour",
+    "spinneys", "marriott", "atlantis", "jumeirah", "purchase", "supplier", "invoice from",
+    "salary", "payroll", "penetration testing", "security assessment", "modelling tool",
+    "registered agent", "catering event", "conference dinner", "client entertainment",
+    "team lunch", "staff quarterly dinner", "sd-wan", "fibre", "wan",
 )
 
 SALE_KEYWORDS = (
     "sold", "revenue", "invoice issued", "customer payment", "service rendered",
     "delivery to customer", "export sale", "consulting services rendered", "fees from",
-    "advisory fees", "dividend", "interest received", "export of", "export to",
-    "freight forwarding", "air freight export", "medical equipment supply",
+    "advisory fees from client", "dividend", "interest received", "export of goods to",
+    "export sale", "sale to customer", "sales invoice", "customer invoice",
     "bare land sale", "training workshop fees",
 )
 
@@ -42,8 +49,9 @@ IMPORT_GOODS_KEYWORDS = (
 ENTERTAINMENT_KEYWORDS = (
     "entertainment", "hospitality", "meals", "restaurant", "hotel", "recreation",
     "party", "event", "catering", "dining", "refreshments", "leisure", "team building",
-    "team lunch", "client dinner", "staff recreation", "conference dinner", "venue",
-    "gala", "celebration", "nobu", "buffet",
+    "team lunch", "client dinner", "client entertainment", "staff recreation",
+    "conference dinner", "venue", "catering event", "staff quarterly dinner",
+    "gala", "celebration", "nobu", "buffet", "team building event",
 )
 
 EXEMPT_KEYWORDS = (
@@ -73,16 +81,25 @@ def _jitter(base: float, spread: float = 3.0) -> float:
     return round(max(0.0, min(100.0, base + random.uniform(-spread, spread))), 1)
 
 
+STRONG_SALE_KEYWORDS = (
+    "export sale", "sale to customer", "sales invoice", "customer invoice",
+    "export of goods", "revenue from", "invoice issued to customer",
+)
+
+
 def determine_transaction_side(
     description: str,
     explicit_type: Optional[str] = None,
     vendor_or_customer: Optional[str] = None,
 ) -> str:
+    """Purchase keywords checked first — expenses default to purchase."""
     combined = f"{description or ''} {vendor_or_customer or ''}".lower()
-    if _contains_any(combined, SALE_KEYWORDS):
+    if _contains_any(combined, STRONG_SALE_KEYWORDS):
         return "sale"
     if _contains_any(combined, PURCHASE_KEYWORDS):
         return "purchase"
+    if _contains_any(combined, SALE_KEYWORDS):
+        return "sale"
     if explicit_type and explicit_type.lower() in ("sale", "purchase"):
         return explicit_type.lower()
     return "purchase"
@@ -152,7 +169,7 @@ def map_box_number(vat_treatment: str, transaction_side: str) -> int:
         return 7
     if treatment == "reverse_charge":
         return 10
-    if treatment == "standard_rated":
+    if treatment in ("standard_rated", "entertainment_restricted"):
         return 9
     if treatment == "zero_rated":
         return 10
@@ -284,12 +301,18 @@ def classify_with_decision_tree(
 ) -> Dict[str, Any]:
     """Full classification: treatment, box, confidence, flags, tier, explanation."""
     amount = float(amount_aed or 0)
-    side = determine_transaction_side(description, transaction_type, vendor_or_customer)
+    combined = f"{description or ''} {vendor_or_customer or ''}".lower()
+
+    # Entertainment is always a purchase expense — detect before side logic
+    entertainment = is_entertainment_expense(description)
+    if entertainment:
+        side = "purchase"
+    else:
+        side = determine_transaction_side(description, transaction_type, vendor_or_customer)
     location = determine_location(description, vendor_or_customer, vendor_trn, vendor_country)
     overseas = location == "overseas"
     missing_trn = _trn_missing_or_invalid(vendor_trn)
-    entertainment = side == "purchase" and is_entertainment_expense(description)
-    import_goods = is_import_goods(description, overseas)
+    import_goods = is_import_goods(description, overseas) and not entertainment
 
     vat_treatment = "standard_rated"
     vat_rate = 5
@@ -308,7 +331,7 @@ def classify_with_decision_tree(
         vat_treatment = "out_of_scope"
         vat_rate = 0
     elif entertainment:
-        vat_treatment = "standard_rated"
+        vat_treatment = "entertainment_restricted"
         vat_rate = 5
         blocked_input_vat = True
         blocked_reason = "UAE VAT Art.54 — input VAT on entertainment restricted to 50% recovery"
@@ -345,7 +368,7 @@ def classify_with_decision_tree(
             vat_treatment = "standard_rated"
             vat_rate = 5
 
-    if vat_treatment in ("standard_rated", "reverse_charge", "import_vat"):
+    if vat_treatment in ("standard_rated", "reverse_charge", "import_vat", "entertainment_restricted"):
         vat_amount_aed = round(amount * 0.05, 2)
     else:
         vat_amount_aed = 0.0
