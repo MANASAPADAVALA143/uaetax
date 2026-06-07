@@ -14,10 +14,16 @@ from services.vat_decision_tree import (
 UAE_TRN_RE = re.compile(r"^1\d{14}$")
 
 ENTERTAINMENT_KEYWORDS = (
-    "entertainment", "hospitality", "meals", "restaurant", "hotel", "recreation",
-    "party", "event", "catering", "dining", "refreshments", "leisure", "team building",
-    "team lunch", "client dinner", "staff recreation", "conference dinner", "venue",
-    "gala", "celebration", "buffet", "dinner", "lunch", "cafe", "nobu",
+    "entertainment", "hospitality",
+    "client dinner", "client entertainment",
+    "team lunch", "team building", "staff recreation",
+    "conference dinner", "catering event", "staff quarterly dinner",
+    "gala", "celebration", "venue hire",
+    "nobu", "buffet", "team building event",
+)
+
+ENTERTAINMENT_EXCLUSIONS = (
+    "pantry supplies", "office refreshments", "office supplies",
 )
 
 FOREIGN_VENDOR_HINTS = (

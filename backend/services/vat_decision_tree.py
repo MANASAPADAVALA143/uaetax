@@ -47,21 +47,39 @@ IMPORT_GOODS_KEYWORDS = (
 )
 
 ENTERTAINMENT_KEYWORDS = (
-    "entertainment", "hospitality", "meals", "restaurant", "hotel", "recreation",
-    "party", "event", "catering", "dining", "refreshments", "leisure", "team building",
-    "team lunch", "client dinner", "client entertainment", "staff recreation",
-    "conference dinner", "venue", "catering event", "staff quarterly dinner",
-    "gala", "celebration", "nobu", "buffet", "team building event",
+    "entertainment", "hospitality",
+    "client dinner", "client entertainment",
+    "team lunch", "team building", "staff recreation",
+    "conference dinner", "catering event", "staff quarterly dinner",
+    "gala", "celebration", "venue hire",
+    "nobu", "buffet", "team building event",
+)
+
+# Operational costs — not Art.54 entertainment
+ENTERTAINMENT_EXCLUSIONS = (
+    "pantry supplies", "office refreshments", "office supplies",
 )
 
 EXEMPT_KEYWORDS = (
-    "residential", "villa lease", "bare land", "local passenger transport",
-    "local transport", "taxi", "careem", "bank interest", "life insurance",
+    "exempt", "exempted", "exemption",
+    "groceries", "food items", "basic food",
+    "bread", "milk", "eggs", "vegetables", "fruits",
+    "residential", "residential rent", "villa lease", "bare land",
+    "local passenger transport", "local transport", "taxi", "careem",
+    "bank interest", "life insurance",
 )
 
 ZERO_RATED_SALE_KEYWORDS = (
     "export", "international freight", "international transport", "zero rated export",
     "export to", "export of", "air freight export", "sea cargo to",
+)
+
+ZERO_RATED_PURCHASE_KEYWORDS = (
+    "zero rated", "zero-rated", "0% vat",
+    "exported goods", "international supply",
+    "education services", "educational",
+    "healthcare", "medical services",
+    "retail merchandise for resale", "merchandise for resale",
 )
 
 OUT_OF_SCOPE_KEYWORDS = (
@@ -123,20 +141,16 @@ def determine_location(
     vendor_trn: Optional[str] = None,
     vendor_country: Optional[str] = None,
 ) -> str:
+    # Valid UAE TRN → domestic vendor; never reverse-charge
+    if not _trn_missing_or_invalid(vendor_trn):
+        return "domestic"
+
     country = (vendor_country or "").strip().lower()
     if country and country not in UAE_COUNTRY_VALUES:
         return "overseas"
 
-    if vendor_trn:
-        cleaned = re.sub(r"\D", "", str(vendor_trn).strip())
-        if cleaned and not UAE_TRN_RE.match(cleaned):
-            return "overseas"
-
     combined = f"{description or ''} {vendor_or_customer or ''}".lower()
     if _contains_any(combined, OVERSEAS_KEYWORDS):
-        return "overseas"
-
-    if _trn_missing_or_invalid(vendor_trn) and _contains_any(combined, OVERSEAS_KEYWORDS):
         return "overseas"
 
     return "domestic"
@@ -149,7 +163,10 @@ def is_import_goods(description: str, overseas: bool) -> bool:
 
 
 def is_entertainment_expense(description: str) -> bool:
-    return _contains_any(description or "", ENTERTAINMENT_KEYWORDS)
+    text = description or ""
+    if _contains_any(text, ENTERTAINMENT_EXCLUSIONS):
+        return False
+    return _contains_any(text, ENTERTAINMENT_KEYWORDS)
 
 
 def map_box_number(vat_treatment: str, transaction_side: str) -> int:
@@ -279,6 +296,8 @@ def _specific_reason(
         return "Overseas digital services/software — Reverse Charge Mechanism applies (Box 10 input)"
     if vat_treatment == "zero_rated" and transaction_side == "sale":
         return "Export or zero-rated supply — output reported in Box 3"
+    if vat_treatment == "zero_rated" and transaction_side == "purchase":
+        return "Zero-rated purchase — input VAT at 0% (Box 10)"
     if vat_treatment == "exempt":
         return "Exempt supply under UAE VAT (residential, financial, or local transport)"
     if vat_treatment == "out_of_scope":
@@ -324,6 +343,7 @@ def classify_with_decision_tree(
     reverse_charge_flag = False
     import_vat_flag = False
     ambiguous = False
+    explicit_treatment = False
 
     combined = f"{description} {vendor_or_customer or ''}".lower()
 
@@ -342,9 +362,11 @@ def classify_with_decision_tree(
         if _contains_any(combined, ZERO_RATED_SALE_KEYWORDS):
             vat_treatment = "zero_rated"
             vat_rate = 0
+            explicit_treatment = True
         elif _contains_any(combined, EXEMPT_KEYWORDS):
             vat_treatment = "exempt"
             vat_rate = 0
+            explicit_treatment = True
         else:
             vat_treatment = "standard_rated"
             vat_rate = 5
@@ -355,15 +377,20 @@ def classify_with_decision_tree(
             import_vat_flag = True
             flag_for_review = True
             flag_reason = "Import VAT — customs declaration required"
-        elif overseas:
+        elif _contains_any(combined, EXEMPT_KEYWORDS):
+            vat_treatment = "exempt"
+            vat_rate = 0
+            explicit_treatment = True
+        elif _contains_any(combined, ZERO_RATED_PURCHASE_KEYWORDS):
+            vat_treatment = "zero_rated"
+            vat_rate = 0
+            explicit_treatment = True
+        elif overseas and missing_trn:
             vat_treatment = "reverse_charge"
             vat_rate = 5
             reverse_charge_flag = True
             flag_for_review = True
             flag_reason = "RCM applies — self-account for VAT as recipient"
-        elif _contains_any(combined, EXEMPT_KEYWORDS):
-            vat_treatment = "exempt"
-            vat_rate = 0
         else:
             vat_treatment = "standard_rated"
             vat_rate = 5
@@ -420,7 +447,7 @@ def classify_with_decision_tree(
     elif (
         reverse_charge_flag
         or import_vat_flag
-        or vat_treatment in ("zero_rated", "exempt")
+        or (vat_treatment in ("zero_rated", "exempt") and not explicit_treatment)
         or ambiguous
         or confidence_score < 85
     ):
