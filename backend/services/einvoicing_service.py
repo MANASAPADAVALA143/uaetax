@@ -16,9 +16,12 @@ VALID_VAT_CATEGORIES = {"S", "Z", "E", "AE"}
 
 PHASE_1_REVENUE_THRESHOLD = 50_000_000
 PHASE_1_MANDATORY = date(2027, 1, 1)
-PHASE_1_ASP_DEADLINE = date(2026, 10, 30)
+PHASE_1_ASP_DEADLINE = date(2026, 10, 30)  # Extended from 31 Jul 2026 (10 May 2026)
 PHASE_2_MANDATORY = date(2027, 7, 1)
 PHASE_2_ASP_DEADLINE = date(2027, 3, 31)
+VOLUNTARY_PILOT_START = date(2026, 7, 1)
+PEPPOL_5_CORNER_ADOPTED = date(2026, 4, 21)
+MONTHLY_NON_COMPLIANCE_PENALTY_AED = 5_000
 
 UBL_NS = {"inv": "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"}
 
@@ -43,6 +46,7 @@ def calculate_phase(annual_revenue_aed: float) -> Dict[str, Any]:
 
     days_to_mandatory = _days_until(mandatory_date)
     days_to_asp = _days_until(asp_deadline)
+    days_to_pilot = _days_until(VOLUNTARY_PILOT_START)
     urgency = days_to_asp < 90
 
     return {
@@ -53,11 +57,22 @@ def calculate_phase(annual_revenue_aed: float) -> Dict[str, Any]:
         "asp_registration_deadline": asp_deadline.isoformat(),
         "days_to_mandatory": days_to_mandatory,
         "days_to_asp_deadline": days_to_asp,
+        "voluntary_pilot_start": VOLUNTARY_PILOT_START.isoformat(),
+        "days_to_voluntary_pilot": days_to_pilot,
+        "voluntary_pilot_open": days_to_pilot <= 0,
+        "peppol_5_corner_adopted": PEPPOL_5_CORNER_ADOPTED.isoformat(),
+        "monthly_penalty_aed": MONTHLY_NON_COMPLIANCE_PENALTY_AED,
+        "phase_1_asp_deadline_label": "30 October 2026",
+        "phase_2_asp_deadline_label": "31 March 2027",
         "urgency_banner": urgency,
         "urgency_message": (
-            f"ASP registration deadline in {days_to_asp} days — appoint an accredited ASP immediately."
-            if urgency
-            else None
+            f"ASP registration deadline in {days_to_asp} days (30 Oct 2026 for Phase 1) — appoint an accredited ASP immediately."
+            if urgency and phase == "phase_1"
+            else (
+                f"ASP registration deadline in {days_to_asp} days — appoint an accredited ASP immediately."
+                if urgency
+                else None
+            )
         ),
     }
 

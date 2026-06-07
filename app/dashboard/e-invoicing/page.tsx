@@ -30,9 +30,20 @@ interface PhaseResult {
   asp_registration_deadline: string;
   days_to_mandatory: number;
   days_to_asp_deadline: number;
+  voluntary_pilot_start?: string;
+  days_to_voluntary_pilot?: number;
+  voluntary_pilot_open?: boolean;
+  peppol_5_corner_adopted?: string;
+  monthly_penalty_aed?: number;
+  phase_1_asp_deadline_label?: string;
+  phase_2_asp_deadline_label?: string;
   urgency_banner: boolean;
   urgency_message: string | null;
 }
+
+const VOLUNTARY_PILOT_START = "2026-07-01";
+const PHASE_1_GO_LIVE = "2027-01-01";
+const PHASE_2_GO_LIVE = "2027-07-01";
 
 interface ValidationField {
   field: string;
@@ -107,6 +118,7 @@ export default function EInvoicingPage() {
   const [phaseResult, setPhaseResult] = useState<PhaseResult | null>(null);
   const [liveDaysAsp, setLiveDaysAsp] = useState<number | null>(null);
   const [liveDaysMandatory, setLiveDaysMandatory] = useState<number | null>(null);
+  const [liveDaysPilot, setLiveDaysPilot] = useState<number | null>(null);
 
   /* Tab 2 — Validate Invoice */
   const [valMode, setValMode] = useState<"form" | "xml">("form");
@@ -149,7 +161,17 @@ export default function EInvoicingPage() {
     return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
   };
 
-  /* Live countdown for phase calculator */
+  /* Live countdown — phase calculator + voluntary pilot banner */
+  useEffect(() => {
+    const updatePilot = () => {
+      const pilotMs = new Date(`${VOLUNTARY_PILOT_START}T00:00:00+04:00`).getTime();
+      setLiveDaysPilot(Math.ceil((pilotMs - Date.now()) / 86400000));
+    };
+    updatePilot();
+    const pilotTimer = window.setInterval(updatePilot, 60000);
+    return () => window.clearInterval(pilotTimer);
+  }, []);
+
   useEffect(() => {
     if (!phaseResult) return;
     const update = () => {
@@ -357,9 +379,92 @@ export default function EInvoicingPage() {
         </div>
         <h2 className="font-playfair text-[26px] font-bold">UAE Peppol / PINT AE</h2>
         <p className="text-[13px] text-muted mt-1 max-w-3xl">
-          Phase calculator, PINT AE validator, ASP readiness checks, and UBL XML generator —
-          aligned to Ministerial Decisions 243/244 (2025).
+          Peppol 5-corner model (adopted 21 Apr 2026) · PINT AE XML · ASP integration ·
+          voluntary pilot from 1 Jul 2026 · Ministerial Decisions 243/244.
         </p>
+      </div>
+
+      {/* FIX 2 — PDF / penalty warning (always visible) */}
+      <div className="mb-4 rounded-xl border border-red/40 bg-[rgba(255,107,107,0.12)] px-5 py-4 flex items-start gap-3">
+        <span className="text-red text-xl">⚠️</span>
+        <div>
+          <p className="text-sm font-semibold text-red">PDF invoices are NOT valid under the UAE mandate</p>
+          <p className="text-[13px] text-muted mt-1">
+            Penalty for non-compliance: <span className="font-mono text-red font-semibold">AED 5,000/month</span> from
+            day one — regardless of business size. Only structured PINT AE XML via an accredited ASP is accepted.
+          </p>
+        </div>
+      </div>
+
+      {/* FIX 1 — Voluntary pilot banner */}
+      {(liveDaysPilot ?? 999) > 0 ? (
+        <div className="mb-4 rounded-xl border border-green/40 bg-[rgba(45,212,160,0.1)] px-5 py-4 flex items-start gap-3">
+          <span className="text-green text-xl">✅</span>
+          <div>
+            <p className="text-sm font-semibold text-green">
+              Voluntary pilot opens in {liveDaysPilot} days — 1 July 2026
+            </p>
+            <p className="text-[13px] text-muted mt-1">
+              Test your ASP connection with zero penalties during the pilot. Start now = no fines while you validate
+              PINT AE XML end-to-end.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 rounded-xl border border-green/40 bg-[rgba(45,212,160,0.1)] px-5 py-4">
+          <p className="text-sm font-semibold text-green">Voluntary pilot is OPEN — test ASP connection with zero penalties</p>
+        </div>
+      )}
+
+      {/* Phase timeline reference */}
+      <div className="mb-6 grid sm:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border bg-[rgba(4,12,30,0.5)] p-4 text-[12px]">
+          <p className="text-gold-lt font-semibold mb-2">Phase 1 — Revenue ≥ AED 50M</p>
+          <p className="text-muted">ASP appointment: <span className="text-white font-mono">30 Oct 2026</span> (extended)</p>
+          <p className="text-muted">Mandatory go-live: <span className="text-white font-mono">1 Jan 2027</span></p>
+        </div>
+        <div className="rounded-xl border border-border bg-[rgba(4,12,30,0.5)] p-4 text-[12px]">
+          <p className="text-gold-lt font-semibold mb-2">Phase 2 — Revenue &lt; AED 50M</p>
+          <p className="text-muted">ASP appointment: <span className="text-white font-mono">31 Mar 2027</span></p>
+          <p className="text-muted">Mandatory go-live: <span className="text-white font-mono">1 Jul 2027</span></p>
+        </div>
+      </div>
+
+      {/* FIX 3 — Peppol 5-corner model */}
+      <div className="mb-6 bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl p-6">
+        <h3 className="text-sm font-semibold text-white mb-2">Peppol 5-Corner Model</h3>
+        <p className="text-[12px] text-muted mb-4">
+          UAE adopted the Peppol 5-corner model on 21 April 2026. All invoices transmit through an ASP and are reported
+          to the FTA in near real time via the Tax Data Document (TDD).
+        </p>
+        <div className="flex flex-col lg:flex-row items-stretch gap-2 text-[11px] font-mono">
+          {[
+            { corner: "Corner 1", label: "Your ERP / GulfTax", sub: "Generate PINT AE XML" },
+            { corner: "Corner 2", label: "Your ASP", sub: "FTA-accredited provider" },
+            { corner: "Corner 3", label: "Buyer ASP", sub: "Recipient network" },
+            { corner: "Corner 4", label: "Buyer ERP", sub: "Accounts payable" },
+            { corner: "Corner 5", label: "FTA", sub: "Tax data reporting" },
+          ].map((step, i, arr) => (
+            <div key={step.corner} className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex-1 rounded-lg border border-border-g bg-gold-pale/30 p-3 text-center">
+                <p className="text-gold-lt text-[10px] uppercase">{step.corner}</p>
+                <p className="text-white font-semibold mt-1 truncate">{step.label}</p>
+                <p className="text-muted2 text-[10px] mt-0.5">{step.sub}</p>
+              </div>
+              {i < arr.length - 1 && <span className="text-gold-lt hidden lg:inline">→</span>}
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 rounded-lg border border-border bg-[rgba(4,12,30,0.6)] p-4">
+          <p className="text-[11px] text-muted2 uppercase tracking-wide mb-2">ASP onboarding roadmap</p>
+          <ol className="text-[13px] text-muted space-y-1.5 list-decimal list-inside">
+            <li><span className="text-green">Generate PINT AE XML in GulfTax ✅</span></li>
+            <li>Appoint an FTA-accredited ASP</li>
+            <li>Connect your ASP to GulfTax via webhook</li>
+            <li>Test during voluntary pilot (Jul 2026)</li>
+            <li>Go live before your mandatory deadline ({PHASE_1_GO_LIVE} Phase 1 / {PHASE_2_GO_LIVE} Phase 2)</li>
+          </ol>
+        </div>
       </div>
 
       {/* Urgency banner from phase result */}
@@ -575,6 +680,8 @@ export default function EInvoicingPage() {
                   <div className="text-muted2 text-[11px] uppercase mb-1">ASP Registration Deadline</div>
                   <div className="font-mono text-gold-lt text-2xl">{liveDaysAsp ?? phaseResult.days_to_asp_deadline} days</div>
                   <div className="text-muted text-[12px] mt-1">
+                    {phaseResult.phase === "phase_1" ? "30 October 2026 (extended)" : "31 March 2027"}
+                    {" · "}
                     {new Date(phaseResult.asp_registration_deadline).toLocaleDateString("en-GB", {
                       day: "2-digit",
                       month: "long",
@@ -587,6 +694,8 @@ export default function EInvoicingPage() {
                   <div className="text-muted2 text-[11px] uppercase mb-1">Mandatory Go-Live</div>
                   <div className="font-mono text-gold-lt text-2xl">{liveDaysMandatory ?? phaseResult.days_to_mandatory} days</div>
                   <div className="text-muted text-[12px] mt-1">
+                    {phaseResult.phase === "phase_1" ? "1 January 2027" : "1 July 2027"}
+                    {" · "}
                     {new Date(phaseResult.mandatory_date).toLocaleDateString("en-GB", {
                       day: "2-digit",
                       month: "long",
@@ -596,6 +705,14 @@ export default function EInvoicingPage() {
                   </div>
                 </div>
               </div>
+
+              {(phaseResult.days_to_voluntary_pilot ?? liveDaysPilot) !== undefined && (
+                <div className="rounded-lg border border-green/30 bg-[rgba(45,212,160,0.08)] px-4 py-3 text-[13px] text-green">
+                  {phaseResult.voluntary_pilot_open || (liveDaysPilot ?? 1) <= 0
+                    ? "Voluntary pilot is open — safe to test ASP integration now."
+                    : `Voluntary pilot opens in ${phaseResult.days_to_voluntary_pilot ?? liveDaysPilot} days (1 Jul 2026).`}
+                </div>
+              )}
 
               {phaseResult.urgency_banner && (
                 <div className="rounded-lg border border-amber/40 bg-[rgba(255,169,64,0.1)] px-4 py-3 text-[13px] text-amber">

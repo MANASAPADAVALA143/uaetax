@@ -462,7 +462,14 @@ async def upcoming_deadlines(
             "description": "FTA VAT return — 28th of month after quarter end",
         },
         {
-            "tax_type": "E-Invoicing Phase 1",
+            "tax_type": "E-Invoicing ASP (Phase 1)",
+            "deadline": "2026-10-30",
+            "days_remaining": (date(2026, 10, 30) - today).days,
+            "urgency": urgency(date(2026, 10, 30)),
+            "description": "Appoint FTA-accredited ASP — extended to 30 Oct 2026",
+        },
+        {
+            "tax_type": "E-Invoicing Phase 1 Go-Live",
             "deadline": "2027-01-01",
             "days_remaining": (date(2027, 1, 1) - today).days,
             "urgency": urgency(date(2027, 1, 1)),
