@@ -14,22 +14,30 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { companies, loading } = useAuth();
+  const { companies, loading, session } = useAuth();
   const [activeNav, setActiveNav] = useState("overview");
 
-  // Redirect to setup only if loading finished AND no companies found after a short delay
-  // Skip redirect entirely in LOCAL_DEV mode
   const isLocalDev = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
+
+  // No Supabase session → login (middleware cannot read localStorage)
   useEffect(() => {
-    if (isLocalDev) return; // local dev bypass — no redirect
-    if (loading) return;
+    if (isLocalDev || loading) return;
+    if (!session) {
+      const next = encodeURIComponent(pathname || "/dashboard");
+      router.replace(`/login?next=${next}`);
+    }
+  }, [loading, session, router, isLocalDev, pathname]);
+
+  // Signed in but no company yet → setup
+  useEffect(() => {
+    if (isLocalDev || loading || !session) return;
     if (companies.length === 0) {
       const timer = setTimeout(() => {
-        if (companies.length === 0) router.push("/setup-company");
-      }, 2000); // 2s grace period for API
+        if (companies.length === 0) router.replace("/setup-company");
+      }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [loading, companies, router, isLocalDev]);
+  }, [loading, companies, session, router, isLocalDev]);
 
   type MainNavItem = {
     id: string;
@@ -70,9 +78,9 @@ export default function DashboardLayout({
 
   const complianceItems: ComplianceNavItem[] = [
     { id: "corporate-tax", label: "Corporate Tax", icon: "🏛️", href: "/dashboard/corporate-tax" },
-    { id: "esr", label: "ESR Filing", icon: "⚖️", href: "#", coming: "Soon" },
-    { id: "transfer-pricing", label: "Transfer Pricing", icon: "🌐", href: "#", coming: "Soon" },
-    { id: "cbcr", label: "CbCR Report", icon: "📑", href: "#", coming: "Soon" },
+    { id: "esr", label: "ESR Filing", icon: "⚖️", href: "/dashboard/esr-filing" },
+    { id: "transfer-pricing", label: "Transfer Pricing", icon: "🌐", href: "/dashboard/transfer-pricing" },
+    { id: "cbcr", label: "CbCR Report", icon: "📑", href: "/dashboard/cbcr-report" },
   ];
 
   const reportItems = [
