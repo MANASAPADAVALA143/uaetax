@@ -801,6 +801,77 @@ async def get_transactions_enriched(
     return {"transactions": enriched, "tier_counts": tiers}
 
 
+def _transaction_flagged(t: Transaction) -> bool:
+    """True when transaction needs review or is blocked."""
+    if not t.is_verified:
+        return True
+    treatment = (t.vat_treatment or "").lower()
+    if treatment in ("entertainment_restricted",):
+        return True
+    flags = t.classification_flags or []
+    return any((f.get("code") or "") not in ("clear", "") for f in flags)
+
+
+@router.get("/vendors")
+async def list_vendors_from_classifier(
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Supplier ledger — vendors aggregated from VAT Classifier transactions."""
+    txns = (
+        db.query(Transaction)
+        .filter(
+            Transaction.company_id == company_id,
+            Transaction.transaction_type == "purchase",
+        )
+        .all()
+    )
+
+    vendor_map: Dict[str, Dict[str, Any]] = {}
+    for t in txns:
+        name = (t.vendor_or_customer or "").strip() or "(unknown)"
+        if name not in vendor_map:
+            vendor_map[name] = {
+                "vendor_name": name,
+                "transaction_count": 0,
+                "total_spend_aed": 0.0,
+                "total_vat_aed": 0.0,
+                "vat_treatments": [],
+                "flagged_count": 0,
+                "blocked_count": 0,
+            }
+        v = vendor_map[name]
+        v["transaction_count"] += 1
+        v["total_spend_aed"] += float(t.amount_aed or 0)
+        v["total_vat_aed"] += float(t.vat_amount_aed or 0)
+        if t.vat_treatment:
+            v["vat_treatments"].append(t.vat_treatment)
+        if _transaction_flagged(t):
+            v["flagged_count"] += 1
+        if (t.vat_treatment or "") == "entertainment_restricted":
+            v["blocked_count"] += 1
+
+    result = []
+    for v in vendor_map.values():
+        treatments = v["vat_treatments"]
+        typical = max(set(treatments), key=treatments.count) if treatments else None
+        flagged = v["flagged_count"]
+        risk = "high" if flagged > 0 else "low"
+
+        result.append({
+            "vendor_name": v["vendor_name"],
+            "transaction_count": v["transaction_count"],
+            "total_spend_aed": round(v["total_spend_aed"], 2),
+            "total_vat_aed": round(v["total_vat_aed"], 2),
+            "vat_treatment": typical,
+            "flagged_count": flagged,
+            "risk_level": risk,
+        })
+
+    result.sort(key=lambda x: (-x["flagged_count"], -x["total_spend_aed"]))
+    return result
+
+
 @router.post("/transactions/bulk-approve-high-confidence")
 async def bulk_approve_high_confidence(
     body: BulkApproveHighConfidenceRequest,

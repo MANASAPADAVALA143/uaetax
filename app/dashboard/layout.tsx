@@ -83,11 +83,20 @@ export default function DashboardLayout({
     { id: "cbcr", label: "CbCR Report", icon: "📑", href: "/dashboard/cbcr-report" },
   ];
 
-  const reportItems = [
+  type ReportNavItem = {
+    id: string;
+    label: string;
+    icon: string;
+    href: string;
+    coming?: string;
+    disabled?: boolean;
+  };
+
+  const reportItems: ReportNavItem[] = [
     { id: "tax-memo", label: "Tax Memo", icon: "🗒️", href: "/dashboard/tax-memo" },
     { id: "fta-reports", label: "FTA Reports", icon: "📈", href: "/dashboard/fta-reports" },
     { id: "suppliers", label: "Supplier Ledger", icon: "🏭", href: "/dashboard/suppliers" },
-    { id: "multi-entity", label: "Multi-Entity", icon: "🏢", href: "#" },
+    { id: "multi-entity", label: "Multi-Entity", icon: "🏢", href: "#", coming: "Enterprise", disabled: true },
   ];
 
   return (
@@ -158,6 +167,23 @@ export default function DashboardLayout({
           </div>
           {reportItems.map((item) => {
             const isActive = pathname === item.href;
+            if (item.disabled) {
+              return (
+                <div
+                  key={item.id}
+                  title="Multi-entity workspace switching — available on Enterprise plan"
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-[13px] font-medium text-muted2 cursor-default select-none opacity-75"
+                >
+                  <span className="text-base flex-shrink-0">{item.icon}</span>
+                  {item.label}
+                  {item.coming && (
+                    <span className="ml-auto text-[9px] bg-gold-pale text-gold-lt border border-border-g px-1.5 py-0.5 rounded-full font-mono uppercase tracking-wide">
+                      {item.coming}
+                    </span>
+                  )}
+                </div>
+              );
+            }
             return (
               <Link
                 key={item.id}
