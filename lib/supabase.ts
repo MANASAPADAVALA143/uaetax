@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
+/** True when Supabase env vars are present (required for sign-in). */
+export function isSupabaseConfigured(): boolean {
+  return Boolean(supabaseUrl && supabaseAnonKey);
+}
+
 /** Singleton Supabase browser client. */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

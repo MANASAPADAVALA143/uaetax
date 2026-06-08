@@ -83,6 +83,9 @@ def _run_column_migrations():
             _add_column(conn, "companies", "plan", "plan VARCHAR(50) DEFAULT 'starter'")
             settings_type = "TEXT DEFAULT '{}'" if is_sqlite else "JSONB DEFAULT '{}'"
             _add_column(conn, "companies", "settings", f"settings {settings_type}")
+            _add_column(conn, "vat_returns", "box9_standard_rated_purchases", "box9_standard_rated_purchases FLOAT DEFAULT 0.0")
+            _add_column(conn, "vat_returns", "box10_zero_rated_purchases", "box10_zero_rated_purchases FLOAT DEFAULT 0.0")
+            _add_column(conn, "vat_returns", "box11_exempt_purchases", "box11_exempt_purchases FLOAT DEFAULT 0.0")
             conn.commit()
     except Exception:
         pass  # Don't crash startup if migration fails

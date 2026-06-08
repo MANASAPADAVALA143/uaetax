@@ -80,6 +80,7 @@ ZERO_RATED_PURCHASE_KEYWORDS = (
     "education services", "educational",
     "healthcare", "medical services",
     "retail merchandise for resale", "merchandise for resale",
+    "flight tickets", "international route", "international flight",
 )
 
 OUT_OF_SCOPE_KEYWORDS = (

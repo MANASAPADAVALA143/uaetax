@@ -32,8 +32,12 @@ def _verify_jwt(token: str) -> dict:
     supabase_url = (
         os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or ""
     ).strip().rstrip("/")
+    # Anon JWT works for /auth/v1/user; sb_secret_* keys need the legacy service_role JWT
     service_key = (
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+        os.getenv("SUPABASE_ANON_KEY")
+        or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or ""
     ).strip()
 
     if not supabase_url:
@@ -50,7 +54,7 @@ def _verify_jwt(token: str) -> dict:
                 "Authorization": f"Bearer {token}",
                 "apikey": service_key,
             },
-            timeout=10,
+            timeout=5,
         )
         if resp.status_code != 200:
             raise HTTPException(status_code=401, detail="Invalid or expired token")

@@ -97,6 +97,9 @@ class VATReturn(Base):
     box6_taxable_expenses = Column(Float, default=0.0)
     box7_vat_on_expenses = Column(Float, default=0.0)
     box8_vat_payable_or_refundable = Column(Float, default=0.0)
+    box9_standard_rated_purchases = Column(Float, default=0.0)
+    box10_zero_rated_purchases = Column(Float, default=0.0)
+    box11_exempt_purchases = Column(Float, default=0.0)
     status = Column(String(50), default="draft")  # draft / submitted / filed
     submission_status = Column(String(50), default="not_submitted", nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=True)

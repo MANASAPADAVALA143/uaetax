@@ -27,7 +27,7 @@ interface AuthState {
   companies: CompanyInfo[];
   activeCompany: CompanyInfo | null;
   loading: boolean;
-  setActiveCompany: (company: CompanyInfo) => void;
+  setActiveCompany: (company: CompanyInfo, token?: string | null) => void;
   signOut: () => Promise<void>;
   refreshCompanies: () => Promise<void>;
 }
@@ -69,14 +69,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /** Fetch user's company list from the backend using the current token. */
   const fetchCompanies = useCallback(async (token: string): Promise<CompanyInfo[]> => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 12_000);
     try {
       const res = await fetch(`${API_URL}/api/auth/my-companies`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
       if (!res.ok) return [];
-      return await res.json() as CompanyInfo[];
+      return (await res.json()) as CompanyInfo[];
     } catch {
       return [];
+    } finally {
+      window.clearTimeout(timer);
     }
   }, []);
 
@@ -117,11 +122,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /** Manually switch active company (multi-company users). */
   const setActiveCompany = useCallback(
-    (company: CompanyInfo) => {
+    (company: CompanyInfo, token?: string | null) => {
       setActiveCompanyState(company);
       setCompanyId(company.company_id);
       localStorage.setItem(ACTIVE_COMPANY_KEY, String(company.company_id));
-      setApiAuth(session?.access_token ?? null, company.company_id);
+      setApiAuth(token ?? session?.access_token ?? null, company.company_id);
     },
     [session]
   );

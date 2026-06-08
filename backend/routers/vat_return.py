@@ -37,6 +37,7 @@ from models import (
     FTASubmissionLog,
     AuditLog,
 )
+from services.vat_decision_tree import classify_with_decision_tree
 
 load_dotenv()
 
@@ -94,6 +95,44 @@ def _transaction_side(t: Transaction) -> str:
     return (getattr(t, "transaction_type", None) or "sale").lower()
 
 
+def _resolve_classification(t: Transaction) -> Dict[str, Any]:
+    """Re-run decision tree so VAT return reflects latest classifier rules."""
+    return classify_with_decision_tree(
+        description=t.description or "",
+        amount_aed=float(t.amount_aed or 0),
+        vendor_or_customer=t.vendor_or_customer,
+        transaction_type=(getattr(t, "transaction_type", None) or "purchase"),
+    )
+
+
+def _apply_calculated_boxes(vat_return: VATReturn, transactions: List[Transaction]) -> VATReturn:
+    """Refresh all box values from verified transactions (latest classifier rules)."""
+    boxes = calculate_vat_return_boxes(transactions)
+    for key, value in boxes.items():
+        if key.startswith("_"):
+            continue
+        if hasattr(vat_return, key):
+            setattr(vat_return, key, value)
+    return vat_return
+
+
+def _vat_return_box_rows(vat_return: VATReturn) -> list:
+    """All 11 FTA boxes for PDF/Excel export."""
+    return [
+        ("Box 1", "Standard Rated Supplies", vat_return.box1_standard_rated_supplies),
+        ("Box 2", "VAT on Supplies (5%)", vat_return.box2_vat_on_supplies),
+        ("Box 3", "Zero Rated Supplies", vat_return.box3_zero_rated_supplies),
+        ("Box 4", "Exempt Supplies", vat_return.box4_exempt_supplies),
+        ("Box 5", "Total Taxable Supplies", vat_return.box5_total_taxable_supplies),
+        ("Box 6", "Taxable Expenses", vat_return.box6_taxable_expenses),
+        ("Box 7", "VAT on Expenses (5%)", vat_return.box7_vat_on_expenses),
+        ("Box 8", "VAT Payable/Refundable", vat_return.box8_vat_payable_or_refundable),
+        ("Box 9", "Standard Rated Purchases", getattr(vat_return, "box9_standard_rated_purchases", 0) or 0),
+        ("Box 10", "Zero Rated Purchases", getattr(vat_return, "box10_zero_rated_purchases", 0) or 0),
+        ("Box 11", "Exempt Purchases", getattr(vat_return, "box11_exempt_purchases", 0) or 0),
+    ]
+
+
 _ENTERTAINMENT_KWS = {
     "restaurant", "hotel", "entertainment", "meals", "leisure", "recreation",
     "hospitality", "catering", "food", "beverage", "drinks", "cafe", "dinner",
@@ -110,44 +149,42 @@ def _is_entertainment(t: Transaction) -> bool:
 
 def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, float]:
     """
-    Calculate all 8 FTA VAT return boxes from transactions.
+    Calculate all 11 FTA VAT return boxes from verified transactions.
 
-    UAE VAT Law (Federal Decree-Law No. 8/2017):
-    - Art. 48: Reverse Charge Mechanism — buyer self-assesses VAT on
-      imported services / goods from non-registered overseas suppliers.
-      RC VAT appears on BOTH the output side (Box 2) and input side (Box 7)
-      simultaneously.  The net cash effect is zero when the buyer is fully
-      taxable, but both boxes must be populated for FTA audit purposes.
-    - Box 1: Standard-rated taxable supplies (sales) — net amount only.
-    - Box 2: Output VAT = (Box 1 × 5%) + RC self-assessed output VAT.
-    - Box 6: Taxable expenses (standard-rated + reverse-charge purchases).
-    - Box 7: Input VAT = (std purchases × 5%) + RC self-assessed input VAT.
-      Entertainment expenses blocked under Art. 53 are excluded.
+    Uses the decision tree resolver so zero_rated / exempt purchases flow into
+    Boxes 10 and 11 even when stored vat_treatment is stale from an earlier run.
     """
-    # ── Split by side and treatment ──────────────────────────────────────────
-    sales_std  = [t for t in transactions if _transaction_side(t) == "sale"
-                  and (t.vat_treatment or "") == "standard_rated"]
-    sales_zero = [t for t in transactions if _transaction_side(t) == "sale"
-                  and (t.vat_treatment or "") == "zero_rated"]
-    sales_ex   = [t for t in transactions if _transaction_side(t) == "sale"
-                  and (t.vat_treatment or "") == "exempt"]
+    enriched = [(t, _resolve_classification(t)) for t in transactions]
 
-    _purch_std_all = [t for t in transactions if _transaction_side(t) == "purchase"
-                      and (t.vat_treatment or "") in ("standard_rated", "entertainment_restricted")]
-    purch_rc       = [t for t in transactions if _transaction_side(t) == "purchase"
-                      and (t.vat_treatment or "") == "reverse_charge"]
-    purch_import   = [t for t in transactions if _transaction_side(t) == "purchase"
-                      and (t.vat_treatment or "") == "import_vat"]
-    purch_zero     = [t for t in transactions if _transaction_side(t) == "purchase"
-                      and (t.vat_treatment or "") == "zero_rated"]
-    purch_exempt   = [t for t in transactions if _transaction_side(t) == "purchase"
-                      and (t.vat_treatment or "") == "exempt"]
+    def _side(r: Dict[str, Any]) -> str:
+        return (r.get("transaction_side") or "purchase").lower()
 
-    # Art.53(1)(b): split standard-rated purchases into claimable vs blocked
-    purch_std_entertainment = [t for t in _purch_std_all if _is_entertainment(t)]
-    purch_std               = [t for t in _purch_std_all if not _is_entertainment(t)]
+    def _treat(r: Dict[str, Any]) -> str:
+        return (r.get("vat_treatment") or "standard_rated").lower()
 
-    def _amt(lst):  return sum(t.amount_aed or 0 for t in lst)
+    def _amt(items: list) -> float:
+        return sum(t.amount_aed or 0 for t in items)
+
+    # ── Split by resolved side and treatment ────────────────────────────────
+    sales_std = [t for t, r in enriched if _side(r) == "sale" and _treat(r) == "standard_rated"]
+    sales_zero = [t for t, r in enriched if _side(r) == "sale" and _treat(r) == "zero_rated"]
+    sales_ex = [t for t, r in enriched if _side(r) == "sale" and _treat(r) == "exempt"]
+
+    purch_std_all = [
+        t for t, r in enriched
+        if _side(r) == "purchase" and _treat(r) in ("standard_rated", "entertainment_restricted")
+    ]
+    purch_rc = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "reverse_charge"]
+    purch_import = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "import_vat"]
+    purch_zero = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "zero_rated"]
+    purch_exempt = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "exempt"]
+
+    purch_std_entertainment = [
+        t for t, r in enriched
+        if _side(r) == "purchase"
+        and (_treat(r) == "entertainment_restricted" or r.get("entertainment_flag"))
+    ]
+    purch_std = [t for t in purch_std_all if t not in purch_std_entertainment]
 
     # ── Boxes 1-5: Sales side ────────────────────────────────────────────────
     box1 = _amt(sales_std)                     # Net standard-rated sales
@@ -241,17 +278,9 @@ def generate_pdf_report(vat_return: VATReturn, company: Company, transactions: L
     story.append(Spacer(1, 12))
     
     # VAT Return Boxes Table
-    data = [
-        ['Box', 'Description', 'Amount (AED)'],
-        ['Box 1', 'Standard Rated Supplies', f"{vat_return.box1_standard_rated_supplies:,.2f}"],
-        ['Box 2', 'VAT on Supplies (5%)', f"{vat_return.box2_vat_on_supplies:,.2f}"],
-        ['Box 3', 'Zero Rated Supplies', f"{vat_return.box3_zero_rated_supplies:,.2f}"],
-        ['Box 4', 'Exempt Supplies', f"{vat_return.box4_exempt_supplies:,.2f}"],
-        ['Box 5', 'Total Taxable Supplies', f"{vat_return.box5_total_taxable_supplies:,.2f}"],
-        ['Box 6', 'Taxable Expenses', f"{vat_return.box6_taxable_expenses:,.2f}"],
-        ['Box 7', 'VAT on Expenses (5%)', f"{vat_return.box7_vat_on_expenses:,.2f}"],
-        ['Box 8', 'VAT Payable/Refundable', f"{vat_return.box8_vat_payable_or_refundable:,.2f}"],
-    ]
+    data = [["Box", "Description", "Amount (AED)"]]
+    for box, desc, amount in _vat_return_box_rows(vat_return):
+        data.append([box, desc, f"{float(amount or 0):,.2f}"])
     
     table = Table(data, colWidths=[30*mm, 100*mm, 50*mm])
     table.setStyle(TableStyle([
@@ -300,20 +329,9 @@ def generate_excel_report(vat_return: VATReturn, company: Company, transactions:
     
     headers = ["Box", "Description", "Amount (AED)"]
     ws1.append(headers)
-    
-    data = [
-        ["Box 1", "Standard Rated Supplies", vat_return.box1_standard_rated_supplies],
-        ["Box 2", "VAT on Supplies (5%)", vat_return.box2_vat_on_supplies],
-        ["Box 3", "Zero Rated Supplies", vat_return.box3_zero_rated_supplies],
-        ["Box 4", "Exempt Supplies", vat_return.box4_exempt_supplies],
-        ["Box 5", "Total Taxable Supplies", vat_return.box5_total_taxable_supplies],
-        ["Box 6", "Taxable Expenses", vat_return.box6_taxable_expenses],
-        ["Box 7", "VAT on Expenses (5%)", vat_return.box7_vat_on_expenses],
-        ["Box 8", "VAT Payable/Refundable", vat_return.box8_vat_payable_or_refundable],
-    ]
-    
-    for row in data:
-        ws1.append(row)
+
+    for box, desc, amount in _vat_return_box_rows(vat_return):
+        ws1.append([box, desc, amount])
     
     # Format Sheet 1
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -324,7 +342,7 @@ def generate_excel_report(vat_return: VATReturn, company: Company, transactions:
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
     
-    for row in ws1.iter_rows(min_row=6, max_row=13):
+    for row in ws1.iter_rows(min_row=6, max_row=16):
         for cell in row:
             if cell.column == 3:  # Amount column
                 cell.number_format = '#,##0.00'
@@ -464,17 +482,7 @@ async def generate_return(
     
     # Calculate VAT return boxes
     box_values = calculate_vat_return_boxes(transactions)
-    _PURCHASE_BOX_KEYS = (
-        "box9_standard_rated_purchases",
-        "box10_zero_rated_purchases",
-        "box11_exempt_purchases",
-    )
-    # Separate DB columns (box1-8) from UI-only metadata and purchase boxes 9-11
-    db_box_values = {
-        k: v for k, v in box_values.items()
-        if not k.startswith("_") and k not in _PURCHASE_BOX_KEYS
-    }
-    purchase_box_values = {k: v for k, v in box_values.items() if k in _PURCHASE_BOX_KEYS}
+    db_box_values = {k: v for k, v in box_values.items() if not k.startswith("_")}
     meta_box_values = {k: v for k, v in box_values.items() if k.startswith("_")}
 
     # Check if return already exists
@@ -520,9 +528,8 @@ async def generate_return(
         "company_id": vat_return.company_id,
         "period_start": vat_return.period_start,
         "period_end": vat_return.period_end,
-        **db_box_values,   # box1-8 from DB record
-        **purchase_box_values,  # box9-11 auto-populated from verified purchases
-        **meta_box_values, # _rc_net_aed, _entertainment_blocked_* etc. for UI
+        **db_box_values,
+        **meta_box_values,
         "status": vat_return.status,
         "created_at": vat_return.created_at,
         "pdf_url": f"/api/vat/returns/{vat_return.id}/pdf",
@@ -553,6 +560,7 @@ async def get_return_pdf(
         )
     ).all()
 
+    vat_return = _apply_calculated_boxes(vat_return, transactions)
     pdf_content = generate_pdf_report(vat_return, company, transactions)
 
     return StreamingResponse(
@@ -585,12 +593,13 @@ async def get_return_excel(
         )
     ).all()
 
+    vat_return = _apply_calculated_boxes(vat_return, transactions)
     excel_content = generate_excel_report(vat_return, company, transactions)
-    
+
     return StreamingResponse(
         io.BytesIO(excel_content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=vat_return_{return_id}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=vat_return_{return_id}.xlsx"},
     )
 
 

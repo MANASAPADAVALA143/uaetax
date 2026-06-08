@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/register", "/", "/api"];
+const PUBLIC_PATHS = ["/login", "/signup", "/register", "/setup-company", "/", "/api"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,23 +20,8 @@ export function middleware(request: NextRequest) {
   );
   if (isPublic) return NextResponse.next();
 
-  // Protect /dashboard/* — redirect to login if no Supabase session cookie
-  if (!pathname.startsWith("/dashboard")) return NextResponse.next();
-
-  const cookies = request.cookies.getAll();
-  const hasSession = cookies.some(
-    (c) =>
-      (c.name.startsWith("sb-") && c.name.includes("-auth-token")) ||
-      c.name === "supabase-auth-token"
-  );
-
-  const isLocalDev = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
-  if (!hasSession && !isLocalDev) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
+  // Session is stored in localStorage (gulftax_session) — Edge middleware cannot read it.
+  // Dashboard auth is enforced client-side in app/dashboard/layout.tsx via AuthContext.
   return NextResponse.next();
 }
 

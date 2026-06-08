@@ -1,8 +1,8 @@
 -- GulfTax AI standalone — Multi-tenant auth tables (thwpeujhuqreceqvhpsb)
--- Run in Supabase SQL Editor BEFORE using /signup with direct Supabase inserts.
+-- ⚠️  FRESH Supabase project ONLY (no existing companies table).
 --
--- NOTE: If Alembic already created integer-PK `companies`, skip the companies/
--- user_companies blocks below and use FastAPI /api/auth/setup-company instead.
+-- If you get: "company_id and id are of incompatible types: uuid and integer"
+-- → STOP. Use 005_multitenant_auth_integer.sql instead (your DB uses integer PKs).
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
