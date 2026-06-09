@@ -20,5 +20,7 @@ supabase>=2.0.0
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.2.2+cpu
 sentence-transformers==2.7.0
-# PDF ingestion (ingest_to_pgvector.py)
+# PDF invoice extraction (VAT Classifier + ingest_to_pgvector.py)
 pdfplumber==0.11.0
+pytesseract==0.3.10
+Pillow==10.0.0

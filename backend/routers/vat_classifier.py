@@ -18,6 +18,7 @@ from middleware.auth import get_current_company_id
 from services.uae_tax_rag_pg import uae_tax_rag  # type: ignore
 from services.vat_decision_tree import classify_with_decision_tree
 from services.vat_enrichment import apply_post_classification_rules, enrich_transaction_row
+from services.pdf_invoice_extractor import extract_and_classify_invoice, MAX_FILES
 
 from database import get_db
 from models import Transaction, Company, AuditLog
@@ -81,6 +82,9 @@ class TransactionResponse(BaseModel):
     is_verified: bool
     verification_history: Optional[List[Dict[str, Any]]] = None
     source: Optional[str] = "vat_classifier"
+    source_file_name: Optional[str] = None
+    vendor_trn: Optional[str] = None
+    source_metadata: Optional[Dict[str, Any]] = None
     source_invoice_id: Optional[int] = None
     created_at: datetime
 
@@ -102,6 +106,32 @@ class BulkVerifyRequest(BaseModel):
 class BulkApproveHighConfidenceRequest(BaseModel):
     min_confidence: float = Field(0.85, ge=0, le=1, description="Minimum confidence 0-1 scale")
     verified_by: str = Field("user", min_length=1)
+
+
+class PdfInvoiceItem(BaseModel):
+    file_name: str
+    status: str
+    vendor_name: Optional[str] = None
+    vendor_trn: Optional[str] = None
+    trn_valid: bool = False
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[str] = None
+    parsed_date: Optional[str] = None
+    description: Optional[str] = None
+    total_aed: float = 0
+    subtotal_aed: Optional[float] = None
+    vat_amount_aed: float = 0
+    currency: Optional[str] = "AED"
+    vat_treatment: Optional[str] = None
+    confidence: float = 0
+    flags: List[str] = Field(default_factory=list)
+    line_items: List[Dict[str, Any]] = Field(default_factory=list)
+    extracted_json: Optional[Dict[str, Any]] = None
+    classification: Optional[Dict[str, Any]] = None
+
+
+class AddPdfInvoicesRequest(BaseModel):
+    invoices: List[PdfInvoiceItem] = Field(..., min_length=1)
 
 
 def _vat_amount_for_treatment(amount_aed: float, treatment: Optional[str]) -> float:
@@ -392,6 +422,7 @@ async def classify_transaction(
         amount_aed=request.amount_aed,
         vendor_or_customer=request.vendor_or_customer,
         invoice_number=request.invoice_number,
+        vendor_trn=None,
         vat_treatment=saved["vat_treatment"],
         transaction_type=saved.get("transaction_side", request.transaction_type),
         vat_amount_aed=saved["vat_amount_aed"],
@@ -400,6 +431,7 @@ async def classify_transaction(
         box_number=saved["box_number"],
         classification_flags=saved["flags"],
         is_verified=saved["review_tier"] == "auto_approve",
+        source="manual",
     )
     
     db.add(transaction)
@@ -726,6 +758,195 @@ def classify_bulk(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+@router.post("/extract-pdf-invoices")
+async def extract_pdf_invoices(
+    files: List[UploadFile] = File(...),
+    entity_type: str = Query("mainland", pattern="^(mainland|free_zone|designated_zone)$"),
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Extract and classify up to 50 PDF/image invoices."""
+    if claude_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY is not configured. Add it to backend/.env to use PDF extraction.",
+        )
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    entity_type = entity_type or company.entity_type
+
+    if len(files) > MAX_FILES:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_FILES} files per upload")
+
+    allowed_ext = {".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    results: List[Dict[str, Any]] = []
+
+    for upload in files:
+        filename = upload.filename or "invoice"
+        lower = filename.lower()
+        if not any(lower.endswith(ext) for ext in allowed_ext):
+            results.append({
+                "file_name": filename,
+                "status": "failed",
+                "vendor_name": None,
+                "vendor_trn": None,
+                "trn_valid": False,
+                "invoice_number": None,
+                "invoice_date": None,
+                "total_aed": 0,
+                "vat_amount_aed": 0,
+                "vat_treatment": None,
+                "confidence": 0,
+                "flags": ["unsupported_format"],
+                "line_items": [],
+                "error": "Unsupported file format",
+            })
+            continue
+
+        content = await upload.read()
+        mime = upload.content_type or "application/octet-stream"
+        result = extract_and_classify_invoice(
+            claude_client,
+            content,
+            filename,
+            mime=mime,
+            entity_type=entity_type,
+        )
+        # Strip internal classification blob from API response (kept for add endpoint)
+        results.append(result)
+
+    extracted_count = sum(1 for r in results if r["status"] == "extracted")
+    review_count = sum(1 for r in results if r["status"] == "review")
+    failed_count = sum(1 for r in results if r["status"] == "failed")
+
+    return {
+        "summary": {
+            "total": len(results),
+            "extracted": extracted_count,
+            "review": review_count,
+            "failed": failed_count,
+        },
+        "invoices": results,
+    }
+
+
+@router.post("/add-pdf-invoices")
+async def add_pdf_invoices_to_transactions(
+    body: AddPdfInvoicesRequest,
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Save extracted PDF invoices to the transactions table."""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    saved: List[Dict[str, Any]] = []
+    skipped = 0
+
+    for inv in body.invoices:
+        if inv.status == "failed":
+            skipped += 1
+            continue
+
+        amount = float(inv.total_aed or inv.subtotal_aed or 0)
+        if amount <= 0:
+            skipped += 1
+            continue
+
+        classification = inv.classification or {}
+        if classification:
+            saved_fields = _save_classification_fields(classification, amount)
+        else:
+            raw = classify_with_decision_tree(
+                description=inv.description or f"Invoice {inv.invoice_number or inv.file_name}",
+                amount_aed=amount,
+                vendor_or_customer=inv.vendor_name,
+                transaction_type="purchase",
+                vendor_trn=inv.vendor_trn,
+            )
+            saved_fields = _save_classification_fields(raw, amount)
+
+        trans_date = date.today()
+        if inv.parsed_date:
+            try:
+                trans_date = date.fromisoformat(inv.parsed_date[:10])
+            except ValueError:
+                pass
+        elif inv.invoice_date:
+            try:
+                trans_date = pd.to_datetime(inv.invoice_date).date()
+            except Exception:
+                pass
+
+        # Dedup by invoice number
+        if inv.invoice_number:
+            existing = (
+                db.query(Transaction)
+                .filter(
+                    Transaction.company_id == company_id,
+                    Transaction.invoice_number == inv.invoice_number,
+                )
+                .first()
+            )
+            if existing:
+                skipped += 1
+                continue
+
+        metadata = {
+            "file_name": inv.file_name,
+            "line_items": inv.line_items,
+            "extracted_json": inv.extracted_json,
+            "flags": inv.flags,
+            "currency": inv.currency,
+            "trn_valid": inv.trn_valid,
+        }
+
+        txn = Transaction(
+            company_id=company_id,
+            date=trans_date,
+            description=inv.description or f"Invoice {inv.invoice_number or inv.file_name}",
+            amount_aed=amount,
+            vendor_or_customer=inv.vendor_name,
+            vendor_trn=inv.vendor_trn,
+            invoice_number=inv.invoice_number,
+            vat_treatment=saved_fields["vat_treatment"],
+            transaction_type=saved_fields.get("transaction_side", "purchase"),
+            vat_amount_aed=float(inv.vat_amount_aed or saved_fields["vat_amount_aed"]),
+            confidence_score=float(inv.confidence or saved_fields["confidence_score_0_100"]),
+            ai_reasoning=saved_fields["reasoning"],
+            box_number=saved_fields["box_number"],
+            classification_flags=saved_fields["flags"],
+            is_verified=saved_fields["review_tier"] == "auto_approve",
+            source="pdf_invoice",
+            source_file_name=inv.file_name,
+            source_metadata=metadata,
+        )
+        db.add(txn)
+        db.flush()
+        saved.append({"id": txn.id, "file_name": inv.file_name, "invoice_number": inv.invoice_number})
+
+    if saved:
+        db.add(
+            AuditLog(
+                company_id=company_id,
+                actor="user",
+                action="add_pdf_invoices",
+                entity=f"{len(saved)} transactions from PDF invoices",
+            )
+        )
+    db.commit()
+
+    return {
+        "saved_count": len(saved),
+        "skipped_count": skipped,
+        "transactions": saved,
+    }
 
 
 @router.get("/classify-bulk/{job_id}/excel")

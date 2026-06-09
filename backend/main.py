@@ -71,6 +71,10 @@ def _run_column_migrations():
             _add_column(conn, "transactions", "box_number", "box_number INTEGER")
             flags_type = "TEXT" if is_sqlite else "JSONB"
             _add_column(conn, "transactions", "classification_flags", f"classification_flags {flags_type}")
+            _add_column(conn, "transactions", "source_file_name", "source_file_name VARCHAR(255)")
+            _add_column(conn, "transactions", "vendor_trn", "vendor_trn VARCHAR(50)")
+            metadata_type = "TEXT" if is_sqlite else "JSONB"
+            _add_column(conn, "transactions", "source_metadata", f"source_metadata {metadata_type}")
             _add_column(conn, "companies", "country", "country VARCHAR(50) DEFAULT 'UAE'")
             _add_column(conn, "companies", "currency", "currency VARCHAR(10) DEFAULT 'AED'")
             _add_column(

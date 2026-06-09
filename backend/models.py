@@ -74,7 +74,10 @@ class Transaction(Base):
     verification_history = Column(JSON, nullable=True)
     # Source tracking — where did this transaction come from?
     source = Column(String(50), nullable=True, default="vat_classifier")
-    # "vat_classifier" | "invoice_flow_auto" | "invoice_flow_reviewed"
+    # "vat_classifier" | "pdf_invoice" | "manual" | "invoice_flow_auto" | "invoice_flow_reviewed"
+    source_file_name = Column(String(255), nullable=True)
+    source_metadata = Column(JSON, nullable=True)  # Original PDF extraction payload
+    vendor_trn = Column(String(50), nullable=True)
     source_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

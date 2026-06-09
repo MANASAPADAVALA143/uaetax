@@ -140,11 +140,13 @@ def enrich_transaction_row(
     stored_box = getattr(txn, "box_number", None)
     stored_reasoning = getattr(txn, "ai_reasoning", None)
 
+    vendor_trn = getattr(txn, "vendor_trn", None)
     dt = classify_with_decision_tree(
         description=desc,
         amount_aed=amount,
         vendor_or_customer=vendor,
         transaction_type=tx_type,
+        vendor_trn=vendor_trn,
     )
 
     resolved_side = dt["transaction_side"]
@@ -187,6 +189,9 @@ def enrich_transaction_row(
         "confidence_score": conf if conf is not None else dt["confidence_score"],
         "is_verified": bool(txn.is_verified),
         "source": getattr(txn, "source", "vat_classifier"),
+        "source_file_name": getattr(txn, "source_file_name", None),
+        "source_metadata": getattr(txn, "source_metadata", None),
+        "vendor_trn": getattr(txn, "vendor_trn", None),
         "source_invoice_id": getattr(txn, "source_invoice_id", None),
         "entertainment_flag": entertainment,
         "entertainment_label": "Art.54 — 50% recovery" if entertainment else None,
