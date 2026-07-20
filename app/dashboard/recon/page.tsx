@@ -7,18 +7,20 @@ import Link from "next/link";
 import axios from "axios";
 import { apiClient } from "@/lib/api";
 
-const STORAGE_RETURNS = "gulftax_vat_returns";
-
-interface StoredReturn {
+interface VatReturnOption {
   return_id: number;
   period_start: string;
   period_end: string;
+  status?: string;
+  box8_vat_payable_or_refundable?: number;
 }
 
 interface MismatchRow {
+  box?: string;
   invoice_number?: string;
   invoice?: string;
   issue: string;
+  invoice_amount?: number;
   transaction_amount?: number;
   return_amount?: number;
   difference?: number;
@@ -29,16 +31,9 @@ interface ReconcileResult {
   difference_aed: number;
   mismatches: MismatchRow[];
   recommendation: string;
-}
-
-function loadReturns(): StoredReturn[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_RETURNS);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  found?: boolean;
+  reconciliation_id?: number;
+  created_at?: string;
 }
 
 function fmtAed(n: number | undefined): string {
@@ -52,26 +47,81 @@ function fmtAed(n: number | undefined): string {
   }).format(v);
 }
 
+function periodLabel(start: string, end: string): string {
+  return `${String(start).slice(0, 10)} → ${String(end).slice(0, 10)}`;
+}
+
 export default function ReconPage() {
-  const [options, setOptions] = useState<StoredReturn[]>([]);
+  const [options, setOptions] = useState<VatReturnOption[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [manualId, setManualId] = useState("");
+  const [listLoading, setListLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReconcileResult | null>(null);
+  const [loadedFromDb, setLoadedFromDb] = useState(false);
 
-  const refreshOptions = useCallback(() => {
-    setOptions(loadReturns());
+  const refreshOptions = useCallback(async () => {
+    setListLoading(true);
+    setError(null);
+    try {
+      const { data } = await apiClient.get<VatReturnOption[]>("/api/vat/returns", {
+        params: { limit: 50 },
+      });
+      const list = Array.isArray(data) ? data : [];
+      setOptions(list);
+      if (list.length > 0) {
+        setSelectedId((prev) => {
+          if (prev && list.some((r) => String(r.return_id) === prev)) return prev;
+          return String(list[0].return_id);
+        });
+      }
+    } catch (e: unknown) {
+      const ax = axios.isAxiosError(e);
+      const msg = ax
+        ? (e.response?.data as { detail?: string })?.detail || e.message
+        : "Failed to load VAT returns";
+      setError(typeof msg === "string" ? msg : "Failed to load VAT returns");
+      setOptions([]);
+    } finally {
+      setListLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    refreshOptions();
-    const onFocus = () => refreshOptions();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    void refreshOptions();
   }, [refreshOptions]);
 
   const effectiveReturnId = selectedId || manualId.trim();
+
+  const loadLatestRecon = useCallback(async (id: number) => {
+    try {
+      const { data } = await apiClient.get<ReconcileResult>(
+        `/api/vat/reconcile/${id}/latest`
+      );
+      if (data?.found && data.status) {
+        setResult(data);
+        setLoadedFromDb(true);
+      } else {
+        setResult(null);
+        setLoadedFromDb(false);
+      }
+    } catch {
+      // No prior recon is fine — user can run a new one
+      setResult(null);
+      setLoadedFromDb(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = parseInt(effectiveReturnId, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      setResult(null);
+      setLoadedFromDb(false);
+      return;
+    }
+    void loadLatestRecon(id);
+  }, [effectiveReturnId, loadLatestRecon]);
 
   const handleReconcile = async () => {
     const id = parseInt(effectiveReturnId, 10);
@@ -81,11 +131,9 @@ export default function ReconPage() {
     }
     setLoading(true);
     setError(null);
-    setResult(null);
+    setLoadedFromDb(false);
     try {
-      const { data } = await apiClient.post<ReconcileResult>(
-        `/api/vat/reconcile/${id}`
-      );
+      const { data } = await apiClient.post<ReconcileResult>(`/api/vat/reconcile/${id}`);
       setResult(data);
     } catch (e: unknown) {
       const ax = axios.isAxiosError(e);
@@ -93,6 +141,7 @@ export default function ReconPage() {
         ? (e.response?.data as { detail?: string })?.detail || e.message
         : "Reconciliation failed";
       setError(typeof msg === "string" ? msg : "Reconciliation failed");
+      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -101,19 +150,14 @@ export default function ReconPage() {
   const rows: MismatchRow[] = result?.mismatches || [];
 
   const exportCsv = () => {
-    const header = ["Invoice / ref", "Issue", "Transaction amount", "Return amount", "Difference"];
+    const header = ["Box / Invoice", "Issue", "Transaction amount", "Return amount", "Difference"];
     const lines = [header.join(",")];
     for (const m of rows) {
-      const inv = (m.invoice_number ?? m.invoice ?? "").toString().replace(/"/g, '""');
+      const inv = (m.box ?? m.invoice_number ?? m.invoice ?? "").toString().replace(/"/g, '""');
       const issue = (m.issue ?? "").replace(/"/g, '""');
+      const txAmt = m.transaction_amount ?? m.invoice_amount ?? "";
       lines.push(
-        [
-          `"${inv}"`,
-          `"${issue}"`,
-          m.transaction_amount ?? "",
-          m.return_amount ?? "",
-          m.difference ?? "",
-        ].join(",")
+        [`"${inv}"`, `"${issue}"`, txAmt, m.return_amount ?? "", m.difference ?? ""].join(",")
       );
     }
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -135,8 +179,8 @@ export default function ReconPage() {
         </div>
         <h2 className="font-playfair text-[26px] font-bold">VAT return reconciliation</h2>
         <p className="text-[13px] text-muted mt-1">
-          Returns generated in this browser are listed below; you can also enter a return ID from
-          the API.
+          Compares verified transactions against VAT returns stored for your company. Results are
+          saved to the database (not the browser).
         </p>
       </div>
 
@@ -144,7 +188,7 @@ export default function ReconPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="block text-[12px] text-muted2 uppercase tracking-wide mb-2">
-              VAT return
+              VAT return (from database)
             </label>
             <select
               value={selectedId}
@@ -152,12 +196,14 @@ export default function ReconPage() {
                 setSelectedId(e.target.value);
                 if (e.target.value) setManualId("");
               }}
-              className="w-full rounded-[10px] bg-[rgba(4,12,30,0.85)] border border-border px-4 py-2.5 text-white text-sm focus:border-border-g focus:outline-none"
+              disabled={listLoading}
+              className="w-full rounded-[10px] bg-[rgba(4,12,30,0.85)] border border-border px-4 py-2.5 text-white text-sm focus:border-border-g focus:outline-none disabled:opacity-50"
             >
-              <option value="">— Select —</option>
+              <option value="">{listLoading ? "Loading…" : "— Select —"}</option>
               {options.map((o) => (
                 <option key={o.return_id} value={String(o.return_id)}>
-                  #{o.return_id} · {o.period_start} → {o.period_end}
+                  #{o.return_id} · {periodLabel(o.period_start, o.period_end)}
+                  {o.status ? ` · ${o.status}` : ""}
                 </option>
               ))}
             </select>
@@ -197,20 +243,21 @@ export default function ReconPage() {
           </button>
           <button
             type="button"
-            onClick={refreshOptions}
-            className="px-4 py-2.5 rounded-[10px] text-sm text-muted border border-border hover:border-border-g"
+            onClick={() => void refreshOptions()}
+            disabled={listLoading}
+            className="px-4 py-2.5 rounded-[10px] text-sm text-muted border border-border hover:border-border-g disabled:opacity-50"
           >
-            Refresh list
+            {listLoading ? "Refreshing…" : "Refresh list"}
           </button>
         </div>
 
-        {options.length === 0 && (
+        {!listLoading && options.length === 0 && (
           <p className="text-[12px] text-muted2">
-            No returns in memory yet. Generate one on{" "}
+            No VAT returns found for this company. Generate one on{" "}
             <Link href="/dashboard/vat-return" className="text-gold-lt underline">
               VAT Return
-            </Link>{" "}
-            or type a return ID.
+            </Link>
+            .
           </p>
         )}
 
@@ -223,7 +270,7 @@ export default function ReconPage() {
 
       {result && (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-6 text-sm">
+          <div className="flex flex-wrap gap-6 text-sm items-end">
             <div>
               <span className="text-muted2 uppercase text-[11px]">Status</span>
               <div className="font-mono text-gold-lt">{result.status}</div>
@@ -232,13 +279,21 @@ export default function ReconPage() {
               <span className="text-muted2 uppercase text-[11px]">Total difference</span>
               <div className="font-mono text-white">{fmtAed(result.difference_aed)}</div>
             </div>
+            {loadedFromDb && (
+              <div className="text-[11px] text-muted2 font-mono pb-0.5">
+                Loaded from database
+                {result.created_at
+                  ? ` · ${new Date(result.created_at).toLocaleString()}`
+                  : ""}
+              </div>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full text-left text-[13px]">
               <thead className="bg-[rgba(4,12,30,0.95)] text-muted2 uppercase text-[11px]">
                 <tr>
-                  <th className="px-4 py-3">Invoice / ref</th>
+                  <th className="px-4 py-3">Box / Invoice</th>
                   <th className="px-4 py-3">Issue</th>
                   <th className="px-4 py-3 text-right">Difference</th>
                 </tr>
@@ -254,7 +309,7 @@ export default function ReconPage() {
                   rows.map((m, i) => (
                     <tr key={i} className="border-t border-border text-muted">
                       <td className="px-4 py-3 font-mono text-white">
-                        {m.invoice_number ?? m.invoice ?? "—"}
+                        {m.box ?? m.invoice_number ?? m.invoice ?? "—"}
                       </td>
                       <td className="px-4 py-3">{m.issue}</td>
                       <td className="px-4 py-3 text-right font-mono text-amber">

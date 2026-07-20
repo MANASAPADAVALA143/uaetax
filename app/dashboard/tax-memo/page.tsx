@@ -169,7 +169,7 @@ export default function TaxMemoPage() {
   // ── Email to CFO ──────────────────────────────────────────────
   function emailCFO(text: string, subject: string) {
     const encodedBody = encodeURIComponent(text);
-    const encodedSubject = encodeURIComponent(`GulfTax AI — ${subject}`);
+    const encodedSubject = encodeURIComponent(`UAE Tax — ${subject}`);
     window.open(`mailto:?subject=${encodedSubject}&body=${encodedBody}`);
   }
 

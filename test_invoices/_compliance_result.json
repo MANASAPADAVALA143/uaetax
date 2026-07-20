@@ -1,0 +1,85 @@
+{
+  "analysis": {
+    "executive_summary": {
+      "period": "Q2 2026 - April to June (transactions dated April 2025)",
+      "total_output_vat": 4500.0,
+      "total_input_vat": 4375.0,
+      "net_vat_position": 125.0,
+      "net_vat_label": "PAYABLE",
+      "issues_count": 4,
+      "compliance_rating": "HIGH RISK",
+      "cfo_summary": "Four compliance issues identified across five transactions. Most critically, SI-0905 applied a 10% VAT rate (AED 2,000 charged) instead of the correct UAE standard rate of 5% (AED 1,000 due) \u2014 an over-charge of AED 1,000 that must be corrected via a credit note and reissued tax invoice to avoid FTA penalties. Additionally, two input tax claims must be fully blocked: the Toyota Land Cruiser (PI-1107, AED 4,750) as a personal-use motor vehicle, and the client entertainment dinner at Marina Grill (PI-1103, AED 900), both disallowed under UAE VAT blocked input tax rules. These two claims total AED 5,650 in irrecoverable VAT. The period label states Q2 2026 but all transaction dates fall in April 2025 \u2014 this inconsistency must be resolved before filing. After corrections, net VAT payable is AED 125.0."
+    },
+    "findings": [
+      {
+        "number": 1,
+        "area": "Output VAT \u2014 Incorrect VAT Rate",
+        "issue": "SI-0905 issued to Al Noor Trading LLC applies a 10% VAT rate (AED 2,000 charged on AED 20,000). UAE VAT law prescribes a standard rate of 5% only. The correct VAT amount is AED 1,000. The invoice over-charges VAT by AED 1,000 and is non-compliant under Federal Decree-Law No. 8 of 2017. A credit note must be issued and a corrected tax invoice reissued. The VAT201 must declare AED 1,000 output VAT, not AED 2,000.",
+        "transaction_ref": "SI-0905",
+        "amount_aed": 20000.0,
+        "vat_impact_aed": 1000.0,
+        "risk": "HIGH",
+        "action": "Issue a credit note to Al Noor Trading LLC cancelling SI-0905. Reissue a compliant tax invoice at 5% (AED 1,000 VAT). Declare AED 1,000 in Box 3 output VAT for this supply. Retain both documents in records. If AED 2,000 was already collected, refund the AED 1,000 over-charge to the customer or risk FTA audit query on inflated output VAT."
+      },
+      {
+        "number": 2,
+        "area": "Input VAT \u2014 Blocked: Personal-Use Motor Vehicle",
+        "issue": "PI-1107 relates to the purchase of a Toyota Land Cruiser classified as a 'company vehicle'. Under UAE VAT law (Cabinet Decision No. 52 of 2017, Article 53), input tax recovery on motor vehicles available for personal use is fully blocked unless the vehicle is used exclusively for a qualifying business purpose (e.g., a taxi, ambulance, or stock-in-trade). A Land Cruiser purchased as a company vehicle is presumed available for personal use. The AED 4,750 input VAT is irrecoverable and must not be claimed in Box 9.",
+        "transaction_ref": "PI-1107",
+        "amount_aed": 95000.0,
+        "vat_impact_aed": 4750.0,
+        "risk": "HIGH",
+        "action": "Remove AED 4,750 from input VAT recovery in Box 9. Retain PI-1107 in records but flag as blocked input tax. If vehicle is exclusively for a qualifying business use (e.g., rental fleet, emergency), obtain and retain documented evidence to support recovery and seek tax advisor confirmation before claiming."
+      },
+      {
+        "number": 3,
+        "area": "Input VAT \u2014 Blocked: Entertainment Expense",
+        "issue": "PI-1103 is a client entertainment dinner at Marina Grill Restaurant for AED 18,000 with AED 900 VAT. Under UAE VAT law (Cabinet Decision No. 52 of 2017, Article 53), input tax on entertainment expenses \u2014 including hospitality, food and beverages provided to non-employees \u2014 is fully blocked and irrecoverable. The AED 900 input VAT cannot be claimed regardless of a valid tax invoice being held.",
+        "transaction_ref": "PI-1103",
+        "amount_aed": 18000.0,
+        "vat_impact_aed": 900.0,
+        "risk": "HIGH",
+        "action": "Remove AED 900 from input VAT recovery in Box 9. Record the full AED 18,900 (inclusive of VAT) as a non-recoverable business expense in the P&L. Establish an internal policy to segregate entertainment invoices from recoverable purchases at point of coding to prevent recurring errors."
+      },
+      {
+        "number": 4,
+        "area": "Reporting Period \u2014 Date Inconsistency",
+        "issue": "The filing period is labelled Q2 2026 (April\u2013June 2026), however all five transactions are dated April 2025 \u2014 a full 12-month discrepancy. Transactions cannot be reported in a VAT201 return for a period that does not match their invoice dates. Filing 2025 transactions in a 2026 return constitutes a misreporting error under FTA regulations and may trigger penalties under Federal Decree-Law No. 28 of 2022 (Tax Procedures Law).",
+        "transaction_ref": "ALL (SI-0905, PI-1107, PI-1103, SI-0901, PI-0902)",
+        "amount_aed": 0.0,
+        "vat_impact_aed": 0.0,
+        "risk": "HIGH",
+        "action": "Confirm the correct tax period for these transactions. If the transactions are genuinely dated April 2025, they belong in the Q2 2025 VAT201 return (or Q1/Q2 2025 depending on tax period). If the 2025 dates are a data entry error and the actual period is April 2026, correct all invoice dates and re-verify documentary evidence. Do not file until the period discrepancy is resolved. Consider voluntary disclosure if the correct period return has already been filed without these transactions."
+      }
+    ],
+    "vat201": {
+      "box_1a_standard_rated": 70000.0,
+      "box_1b_zero_rated": 0.0,
+      "box_2_exempt": 0.0,
+      "box_3_output_vat": 4500.0,
+      "box_9_input_vat": 4375.0,
+      "box_10_net_vat": 125.0
+    },
+    "priority_actions": [
+      "URGENT \u2014 Correct SI-0905 immediately: issue a credit note to Al Noor Trading LLC and reissue a compliant tax invoice at 5% (AED 1,000 VAT). Do not remit AED 2,000 output VAT to FTA; declare only AED 1,000 for this supply.",
+      "URGENT \u2014 Resolve period date inconsistency before filing: all transactions are dated April 2025 but the return is labelled Q2 2026. Confirm correct filing period, correct invoice dates if erroneous, and assess whether a voluntary disclosure is required for any already-filed period.",
+      "Block AED 4,750 input VAT on Toyota Land Cruiser (PI-1107) from Box 9 recovery. Obtain legal/tax advice if an exclusive business-use exemption argument is to be made, and retain supporting documentation.",
+      "Block AED 900 input VAT on Marina Grill entertainment dinner (PI-1103) from Box 9 recovery. Implement an internal purchase coding policy to flag entertainment expenses as blocked input tax at point of invoice entry.",
+      "Review all remaining Q2 invoices not included in this sample to ensure no further instances of incorrect VAT rates, blocked input tax claims, or missing TRN details before submission of VAT201."
+    ],
+    "audit_triggers": {
+      "advance_payments": false,
+      "intercompany": false,
+      "deemed_supplies": false,
+      "bad_debt": false,
+      "late_registration_risk": false,
+      "deregistration_risk": false,
+      "blocked_input_tax": true,
+      "missing_trn": false
+    },
+    "high_risk_found": true,
+    "disclosure_needed": true
+  },
+  "row_count": 5,
+  "review_id": "7888cb21-d9ae-4f34-b8c4-f3ce7b470097"
+}

@@ -28,9 +28,83 @@ PURCHASE_KEYWORDS = (
 SALE_KEYWORDS = (
     "sold", "revenue", "invoice issued", "customer payment", "service rendered",
     "delivery to customer", "export sale", "consulting services rendered", "fees from",
-    "advisory fees from client", "dividend", "interest received", "export of goods to",
-    "export sale", "sale to customer", "sales invoice", "customer invoice",
-    "bare land sale", "training workshop fees",
+    "advisory fees from client", "interest received", "export of goods to",
+    "sale to customer", "sales invoice", "customer invoice",
+    "training workshop fees", "advance received", "advance payment received",
+    "client fee", "fees received",
+)
+
+EXPORT_SALE_KEYWORDS = (
+    "export", "export sale", "export to", "export of", "exported to",
+    "uk client", "korea", "singapore", "overseas client", "international client",
+    "overseas sale", "foreign client", "international freight", "zero rated export",
+    "air freight export", "sea cargo to",
+)
+
+RCM_SERVICE_KEYWORDS = (
+    "aws", "google", "microsoft", "salesforce", "oracle", "sap", "adobe", "zoom",
+    "cloud", "saas", "software subscription", "digital service", "foreign supplier",
+    "netflix", "spotify", "dropbox", "slack", "github", "hosting",
+)
+
+LOCAL_SUPPLIER_KEYWORDS = (
+    "maintenance", "repair", "contractor", "handyman", "plumber", "electrician",
+    "local supplier", "small contractor", "cleaning service", "facilities repair",
+)
+
+INTERCOMPANY_RCM_KEYWORDS = (
+    "parent company", "foreign parent", "intercompany", "group recharge",
+    "bvi", "overseas parent", "intragroup",
+)
+
+DEEMED_SUPPLY_KEYWORDS = (
+    "corporate gift", "gifts", "gift hamper", "ramadan hamper", "samples",
+    "gift to client", "promotional gift",
+)
+
+ADVANCE_RECEIVED_KEYWORDS = (
+    "advance payment received", "advance received",
+)
+
+PENALTY_KEYWORDS = (
+    "penalty", "fine", "government penalty", "late filing penalty", "traffic fine",
+    "penalties",
+)
+
+CLIENT_ENTERTAINMENT_KEYWORDS = (
+    "client dinner", "client entertainment", "client event",
+    "entertainment", "hospitality", "gala", "nobu", "buffet",
+    "conference dinner", "catering event", "venue hire",
+)
+
+EMPLOYEE_WELFARE_KEYWORDS = (
+    "team building", "staff event", "employee welfare", "staff quarterly dinner",
+    "staff recreation", "team lunch", "team building event",
+)
+
+PASSENGER_VEHICLE_KEYWORDS = (
+    "land cruiser", "hilux", "sedan", "saloon", "suv", "passenger vehicle",
+    "company car", "motor vehicle purchase",
+)
+
+COMMERCIAL_VEHICLE_KEYWORDS = (
+    "truck", "lorry", "delivery van", "ambulance", "taxi", "rental fleet",
+    "commercial vehicle", "goods vehicle",
+)
+
+HEALTHCARE_PATIENT_KEYWORDS = (
+    "patient fee", "patient fees", "clinic fee", "hospital fee",
+    "medical consultation", "patient charges", "outpatient",
+)
+
+FIRST_RESIDENTIAL_SUPPLY_KEYWORDS = (
+    "first supply", "new residential", "off-plan first", "first sale residential",
+    "first supply residential",
+)
+
+REAL_ESTATE_COMMERCIAL_KEYWORDS = (
+    "commercial rent", "office rent", "warehouse rent", "retail space",
+    "commercial property", "business bay", "difc office",
 )
 
 OVERSEAS_KEYWORDS = (
@@ -46,14 +120,7 @@ IMPORT_GOODS_KEYWORDS = (
     "raw materials", "sea cargo import", "customs declaration",
 )
 
-ENTERTAINMENT_KEYWORDS = (
-    "entertainment", "hospitality",
-    "client dinner", "client entertainment",
-    "team lunch", "team building", "staff recreation",
-    "conference dinner", "catering event", "staff quarterly dinner",
-    "gala", "celebration", "venue hire",
-    "nobu", "buffet", "team building event",
-)
+ENTERTAINMENT_KEYWORDS = CLIENT_ENTERTAINMENT_KEYWORDS
 
 # Operational costs — not Art.54 entertainment
 ENTERTAINMENT_EXCLUSIONS = (
@@ -69,10 +136,7 @@ EXEMPT_KEYWORDS = (
     "bank interest", "life insurance",
 )
 
-ZERO_RATED_SALE_KEYWORDS = (
-    "export", "international freight", "international transport", "zero rated export",
-    "export to", "export of", "air freight export", "sea cargo to",
-)
+ZERO_RATED_SALE_KEYWORDS = EXPORT_SALE_KEYWORDS
 
 ZERO_RATED_PURCHASE_KEYWORDS = (
     "zero rated", "zero-rated", "0% vat",
@@ -84,8 +148,35 @@ ZERO_RATED_PURCHASE_KEYWORDS = (
 )
 
 OUT_OF_SCOPE_KEYWORDS = (
-    "salary", "payroll", "dividend", "intercompany loan", "loan repayment",
-    "shareholder distribution", "employees payroll",
+    "salary", "payroll", "wages", "dividend", "intercompany loan", "loan repayment",
+    "shareholder distribution", "employees payroll", "employment cost",
+    "security deposit", "tenancy deposit", "refundable deposit",
+    "damage deposit", "deposit refund",
+    "penalty", "fine", "government penalty", "insurance claim received",
+)
+
+GOVERNMENT_FEE_KEYWORDS = (
+    "building permit", "municipality", "court fee", "court fees",
+    "dld", "land department", "trade licence", "trade license",
+    "government fee", "government registration", "visa fee", "al quoz plot",
+    "rta fee", "ministry fee", "dubai land department",
+)
+
+BANK_FEE_KEYWORDS = (
+    "bank charge", "bank charges", "bank service", "banking fee", "banking fees",
+    "swift transfer", "wire transfer", "account maintenance", "loan processing",
+    "overdraft charge", "trade finance", "letter of credit", "loan arrangement",
+)
+
+GROUP_MEDICAL_KEYWORDS = (
+    "group medical", "medical insurance", "health insurance",
+    "employee medical", "daman", "orient insurance", "nas medical",
+)
+
+INTERNATIONAL_FLIGHT_KEYWORDS = (
+    "international flight", "international route", "flight tickets",
+    "business class flight", "business class flights",
+    "dubai–london", "dubai-london", "dubai to london", "dxb-lhr", "dxb-lhr",
 )
 
 UAE_COUNTRY_VALUES = {"uae", "ae", "united arab emirates", "dubai", "abu dhabi", ""}
@@ -111,17 +202,66 @@ def determine_transaction_side(
     explicit_type: Optional[str] = None,
     vendor_or_customer: Optional[str] = None,
 ) -> str:
-    """Purchase keywords checked first — expenses default to purchase."""
+    """Rule 1 — explicit transaction_type is the primary signal."""
+    if explicit_type and str(explicit_type).lower().strip() in ("sale", "purchase"):
+        return str(explicit_type).lower().strip()
     combined = f"{description or ''} {vendor_or_customer or ''}".lower()
-    if _contains_any(combined, STRONG_SALE_KEYWORDS):
+    if _contains_any(combined, STRONG_SALE_KEYWORDS) or _contains_any(combined, EXPORT_SALE_KEYWORDS):
         return "sale"
     if _contains_any(combined, PURCHASE_KEYWORDS):
         return "purchase"
     if _contains_any(combined, SALE_KEYWORDS):
         return "sale"
-    if explicit_type and explicit_type.lower() in ("sale", "purchase"):
-        return explicit_type.lower()
     return "purchase"
+
+
+def is_employee_welfare(description: str) -> bool:
+    text = description or ""
+    if _contains_any(text, ENTERTAINMENT_EXCLUSIONS):
+        return False
+    return _contains_any(text, EMPLOYEE_WELFARE_KEYWORDS)
+
+
+def is_client_entertainment(description: str) -> bool:
+    text = description or ""
+    if _contains_any(text, ENTERTAINMENT_EXCLUSIONS):
+        return False
+    if is_employee_welfare(text):
+        return False
+    return _contains_any(text, CLIENT_ENTERTAINMENT_KEYWORDS)
+
+
+def is_passenger_vehicle(description: str) -> bool:
+    text = (description or "").lower()
+    if _contains_any(text, COMMERCIAL_VEHICLE_KEYWORDS):
+        return False
+    return _contains_any(text, PASSENGER_VEHICLE_KEYWORDS)
+
+
+def _qualifies_for_reverse_charge(
+    combined: str,
+    side: str,
+    overseas: bool,
+    missing_trn: bool,
+) -> bool:
+    """Rule 3 — RCM applies to overseas purchases / imported services only."""
+    if side != "purchase":
+        return False
+    if _contains_any(combined, OUT_OF_SCOPE_KEYWORDS) or _contains_any(combined, PENALTY_KEYWORDS):
+        return False
+    if _contains_any(combined, DEEMED_SUPPLY_KEYWORDS):
+        return False
+    if _contains_any(combined, INTERCOMPANY_RCM_KEYWORDS):
+        return True
+    if _contains_any(combined, LOCAL_SUPPLIER_KEYWORDS) and not _contains_any(
+        combined, RCM_SERVICE_KEYWORDS
+    ):
+        return False
+    if overseas and missing_trn and _contains_any(combined, RCM_SERVICE_KEYWORDS):
+        return True
+    if overseas and missing_trn and _contains_any(combined, OVERSEAS_KEYWORDS):
+        return True
+    return False
 
 
 def _trn_missing_or_invalid(vendor_trn: Optional[str]) -> bool:
@@ -164,15 +304,15 @@ def is_import_goods(description: str, overseas: bool) -> bool:
 
 
 def is_entertainment_expense(description: str) -> bool:
-    text = description or ""
-    if _contains_any(text, ENTERTAINMENT_EXCLUSIONS):
-        return False
-    return _contains_any(text, ENTERTAINMENT_KEYWORDS)
+    return is_client_entertainment(description)
 
 
-def map_box_number(vat_treatment: str, transaction_side: str) -> int:
+def map_box_number(vat_treatment: str, transaction_side: str) -> Optional[int]:
     side = (transaction_side or "purchase").lower()
     treatment = (vat_treatment or "standard_rated").lower()
+
+    if treatment == "out_of_scope":
+        return None
 
     if side == "sale":
         if treatment == "standard_rated":
@@ -264,6 +404,7 @@ def build_explanation(
     side_label = "Purchase" if transaction_side == "purchase" else "Sale"
     loc_label = "Domestic" if location == "domestic" else "Overseas"
     treatment_label = (vat_treatment or "standard_rated").replace("_", " ")
+    box_line = f"- FTA Return: Box {box_number}" if box_number is not None else "- FTA Return: N/A (Out of Scope)"
     return (
         f"Reasoning:\n"
         f"{vendor} is classified as {treatment_label} because:\n"
@@ -271,7 +412,7 @@ def build_explanation(
         f"- Vendor location: {loc_label}\n"
         f"- {specific_reason}\n"
         f"- Confidence: {confidence_score:.0f}%\n"
-        f"- FTA Return: Box {box_number}"
+        f"{box_line}"
     )
 
 
@@ -323,16 +464,18 @@ def classify_with_decision_tree(
     amount = float(amount_aed or 0)
     combined = f"{description or ''} {vendor_or_customer or ''}".lower()
 
-    # Entertainment is always a purchase expense — detect before side logic
-    entertainment = is_entertainment_expense(description)
-    if entertainment:
-        side = "purchase"
-    else:
-        side = determine_transaction_side(description, transaction_type, vendor_or_customer)
+    side = determine_transaction_side(description, transaction_type, vendor_or_customer)
     location = determine_location(description, vendor_or_customer, vendor_trn, vendor_country)
     overseas = location == "overseas"
     missing_trn = _trn_missing_or_invalid(vendor_trn)
-    import_goods = is_import_goods(description, overseas) and not entertainment
+    import_goods = is_import_goods(description, overseas)
+    client_entertainment = is_client_entertainment(description) and side == "purchase"
+    employee_welfare = is_employee_welfare(description) and side == "purchase"
+    passenger_vehicle = is_passenger_vehicle(description) and side == "purchase"
+    intercompany = _contains_any(combined, INTERCOMPANY_RCM_KEYWORDS)
+    healthcare = _contains_any(combined, HEALTHCARE_PATIENT_KEYWORDS) or _contains_any(
+        combined, GROUP_MEDICAL_KEYWORDS
+    )
 
     vat_treatment = "standard_rated"
     vat_rate = 5
@@ -346,12 +489,12 @@ def classify_with_decision_tree(
     ambiguous = False
     explicit_treatment = False
 
-    combined = f"{description} {vendor_or_customer or ''}".lower()
-
+    # Rule 8 — Out of Scope (no FTA box)
     if _contains_any(combined, OUT_OF_SCOPE_KEYWORDS):
         vat_treatment = "out_of_scope"
         vat_rate = 0
-    elif entertainment:
+        explicit_treatment = True
+    elif client_entertainment:
         vat_treatment = "entertainment_restricted"
         vat_rate = 5
         blocked_input_vat = True
@@ -360,10 +503,36 @@ def classify_with_decision_tree(
         flag_reason = blocked_reason
         blocked_vat_amount = round(amount * 0.05 * 0.5, 2)
     elif side == "sale":
-        if _contains_any(combined, ZERO_RATED_SALE_KEYWORDS):
+        # Rule 2 — Export services (zero rated, never RCM)
+        if _contains_any(combined, ZERO_RATED_SALE_KEYWORDS) or _contains_any(combined, EXPORT_SALE_KEYWORDS):
             vat_treatment = "zero_rated"
             vat_rate = 0
             explicit_treatment = True
+        # Rule 12 — Advance payment received
+        elif _contains_any(combined, ADVANCE_RECEIVED_KEYWORDS):
+            vat_treatment = "standard_rated"
+            vat_rate = 5
+            flag_for_review = True
+            flag_reason = "Advance payment — VAT due on receipt; log in Advance Payment VAT Tracker"
+        # Rule 6 — Deemed supply gifts (Art.12 output)
+        elif _contains_any(combined, DEEMED_SUPPLY_KEYWORDS):
+            vat_treatment = "standard_rated"
+            vat_rate = 5
+            explicit_treatment = True
+        # Rule 5 — First residential supply
+        elif _contains_any(combined, FIRST_RESIDENTIAL_SUPPLY_KEYWORDS):
+            vat_treatment = "zero_rated"
+            vat_rate = 0
+            explicit_treatment = True
+            flag_for_review = True
+            flag_reason = "Real estate — confirm first supply within 3 years of completion"
+        # Rule 11 — Healthcare patient fees (exempt, not zero rated)
+        elif _contains_any(combined, HEALTHCARE_PATIENT_KEYWORDS):
+            vat_treatment = "exempt"
+            vat_rate = 0
+            explicit_treatment = True
+            flag_for_review = True
+            flag_reason = "Confirm qualifying healthcare status"
         elif _contains_any(combined, EXEMPT_KEYWORDS):
             vat_treatment = "exempt"
             vat_rate = 0
@@ -372,29 +541,76 @@ def classify_with_decision_tree(
             vat_treatment = "standard_rated"
             vat_rate = 5
     elif side == "purchase":
-        if import_goods:
+        if import_goods and not client_entertainment:
             vat_treatment = "import_vat"
             vat_rate = 5
             import_vat_flag = True
             flag_for_review = True
             flag_reason = "Import VAT — customs declaration required"
+        elif _contains_any(combined, GOVERNMENT_FEE_KEYWORDS):
+            vat_treatment = "exempt"
+            vat_rate = 0
+            explicit_treatment = True
+        elif _contains_any(combined, BANK_FEE_KEYWORDS):
+            vat_treatment = "exempt"
+            vat_rate = 0
+            explicit_treatment = True
+        elif _contains_any(combined, GROUP_MEDICAL_KEYWORDS):
+            vat_treatment = "exempt"
+            vat_rate = 0
+            explicit_treatment = True
+            blocked_input_vat = True
+            blocked_reason = "Art.53 — input VAT on employee medical insurance benefit not recoverable"
+            flag_for_review = True
+            flag_reason = blocked_reason
+        elif _contains_any(combined, FIRST_RESIDENTIAL_SUPPLY_KEYWORDS):
+            vat_treatment = "zero_rated"
+            vat_rate = 0
+            explicit_treatment = True
         elif _contains_any(combined, EXEMPT_KEYWORDS):
             vat_treatment = "exempt"
             vat_rate = 0
             explicit_treatment = True
-        elif _contains_any(combined, ZERO_RATED_PURCHASE_KEYWORDS):
+        elif _contains_any(combined, ZERO_RATED_PURCHASE_KEYWORDS) or _contains_any(
+            combined, INTERNATIONAL_FLIGHT_KEYWORDS
+        ):
             vat_treatment = "zero_rated"
             vat_rate = 0
             explicit_treatment = True
-        elif overseas and missing_trn:
+        elif _qualifies_for_reverse_charge(combined, side, overseas, missing_trn):
             vat_treatment = "reverse_charge"
             vat_rate = 5
             reverse_charge_flag = True
             flag_for_review = True
             flag_reason = "RCM applies — self-account for VAT as recipient"
+            if intercompany:
+                flag_reason = "Intercompany imported service — RCM applies; TP documentation required"
+        elif employee_welfare:
+            vat_treatment = "standard_rated"
+            vat_rate = 5
+            flag_for_review = True
+            flag_reason = "Art.53 — confirm if employee welfare or entertainment"
+        elif passenger_vehicle:
+            vat_treatment = "standard_rated"
+            vat_rate = 5
+            flag_for_review = True
+            flag_reason = "Blocked input VAT risk — Art.53(1)(b) — confirm exclusive business use"
+        elif missing_trn and not overseas:
+            vat_treatment = "standard_rated"
+            vat_rate = 5
+            flag_for_review = True
+            flag_reason = "Missing vendor TRN — standard rated with verification required"
         else:
             vat_treatment = "standard_rated"
             vat_rate = 5
+
+    if intercompany and side == "purchase":
+        flag_for_review = True
+        flag_reason = flag_reason or "Transfer pricing documentation required"
+
+    if healthcare and vat_treatment not in ("exempt", "out_of_scope"):
+        flag_for_review = True
+        flag_reason = flag_reason or "Confirm qualifying healthcare status"
 
     if vat_treatment in ("standard_rated", "reverse_charge", "import_vat", "entertainment_restricted"):
         vat_amount_aed = round(amount * 0.05, 2)
@@ -405,7 +621,9 @@ def classify_with_decision_tree(
         side == "purchase"
         and location == "domestic"
         and vat_treatment == "standard_rated"
-        and not entertainment
+        and not client_entertainment
+        and not employee_welfare
+        and not passenger_vehicle
     )
     clear_domestic_sale = (
         side == "sale"
@@ -413,8 +631,12 @@ def classify_with_decision_tree(
         and vat_treatment == "standard_rated"
     )
 
-    if entertainment:
+    if client_entertainment:
         confidence_score = _jitter(40.0)
+    elif employee_welfare or passenger_vehicle or healthcare:
+        confidence_score = _jitter(50.0, 5.0)
+    elif intercompany:
+        confidence_score = _jitter(48.0, 5.0)
     elif import_vat_flag:
         confidence_score = _jitter(80.0, 2.0)
     elif reverse_charge_flag:
@@ -427,8 +649,8 @@ def classify_with_decision_tree(
         confidence_score = _jitter(97.0, 1.0)
     elif vat_treatment == "out_of_scope":
         confidence_score = _jitter(88.0, 2.0)
-    elif missing_trn and side == "purchase":
-        confidence_score = _jitter(60.0, 3.0)
+    elif missing_trn and side == "purchase" and vat_treatment == "standard_rated":
+        confidence_score = _jitter(62.0, 3.0)
         ambiguous = True
         flag_for_review = True
         flag_reason = flag_reason or "Missing vendor TRN — manual verification recommended"
@@ -443,8 +665,10 @@ def classify_with_decision_tree(
 
     box_number = map_box_number(vat_treatment, side)
 
-    if entertainment:
+    if client_entertainment:
         review_tier = "blocked"
+    elif employee_welfare or passenger_vehicle or intercompany or healthcare:
+        review_tier = "review_required"
     elif (
         reverse_charge_flag
         or import_vat_flag
@@ -460,7 +684,7 @@ def classify_with_decision_tree(
         transaction_side=side,
         location=location,
         vat_treatment=vat_treatment,
-        entertainment=entertainment,
+        entertainment=client_entertainment,
         import_goods=import_goods,
         missing_trn=missing_trn,
     )
@@ -476,12 +700,26 @@ def classify_with_decision_tree(
     )
 
     flags = build_risk_flags(
-        missing_trn=missing_trn and side == "purchase",
-        entertainment=entertainment,
+        missing_trn=missing_trn and side == "purchase" and not reverse_charge_flag,
+        entertainment=client_entertainment,
         reverse_charge=reverse_charge_flag,
         import_vat=import_vat_flag,
         review_required=review_tier == "review_required",
     )
+    if intercompany:
+        flags.append({
+            "code": "transfer_pricing",
+            "icon": "🟡",
+            "label": "Transfer Pricing",
+            "tooltip": "Intercompany transaction — transfer pricing documentation required",
+        })
+    if passenger_vehicle:
+        flags.append({
+            "code": "motor_vehicle",
+            "icon": "⚠️",
+            "label": "Motor Vehicle",
+            "tooltip": "Art.53(1)(b) — confirm exclusive business use before recovering input VAT",
+        })
 
     return {
         "vat_treatment": vat_treatment,
@@ -496,7 +734,7 @@ def classify_with_decision_tree(
         "blocked_input_vat": blocked_input_vat,
         "blocked_reason": blocked_reason,
         "blocked_vat_amount": blocked_vat_amount,
-        "entertainment_flag": entertainment,
+        "entertainment_flag": client_entertainment,
         "reverse_charge_flag": reverse_charge_flag,
         "import_vat_flag": import_vat_flag,
         "box_number": box_number,

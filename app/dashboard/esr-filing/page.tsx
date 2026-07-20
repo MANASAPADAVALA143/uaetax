@@ -2,7 +2,10 @@
 
 export const dynamic = "force-dynamic";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiClient } from "@/lib/api";
+
+const FINANCIAL_YEAR = "2025";
 
 const ESR_ACTIVITIES = [
   "Banking Business",
@@ -61,6 +64,9 @@ export default function EsrFilingPage() {
   const [notificationDate, setNotificationDate] = useState("");
   const [returnFiled, setReturnFiled] = useState(false);
   const [returnDate, setReturnDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const esrApplies = Object.values(activities).some(Boolean);
 
@@ -92,6 +98,113 @@ export default function EsrFilingPage() {
     setActivities((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
+  const buildPayload = useCallback(() => {
+    const selectedActivities = Object.entries(activities)
+      .filter(([, on]) => on)
+      .map(([name]) => name);
+    const filingStatus = returnFiled ? "filed" : notificationFiled || esrApplies ? "in_progress" : "not_started";
+    const uiState = {
+      activities,
+      test1,
+      test2,
+      test3,
+      notificationFiled,
+      notificationDate,
+      returnFiled,
+      returnDate,
+    };
+    return {
+      company_id: undefined,
+      financial_year: FINANCIAL_YEAR,
+      esr_activity: selectedActivities.join(", "),
+      income_test: test1Status === "pass",
+      employees_test: test2Status === "pass",
+      assets_test: test3Status === "pass",
+      filing_status: filingStatus,
+      notes: JSON.stringify(uiState),
+    };
+  }, [
+    activities,
+    test1,
+    test2,
+    test3,
+    notificationFiled,
+    notificationDate,
+    returnFiled,
+    returnDate,
+    esrApplies,
+    test1Status,
+    test2Status,
+    test3Status,
+  ]);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get(`/api/esr/status?financial_year=${FINANCIAL_YEAR}`);
+      if (!data?.found || !data.ui_state) return;
+      const ui = data.ui_state as {
+        activities?: Record<string, boolean>;
+        test1?: typeof test1;
+        test2?: typeof test2;
+        test3?: typeof test3;
+        notificationFiled?: boolean;
+        notificationDate?: string;
+        returnFiled?: boolean;
+        returnDate?: string;
+      };
+      if (ui.activities) setActivities(ui.activities);
+      if (ui.test1) setTest1(ui.test1);
+      if (ui.test2) setTest2(ui.test2);
+      if (ui.test3) setTest3(ui.test3);
+      if (typeof ui.notificationFiled === "boolean") setNotificationFiled(ui.notificationFiled);
+      if (ui.notificationDate) setNotificationDate(ui.notificationDate);
+      if (typeof ui.returnFiled === "boolean") setReturnFiled(ui.returnFiled);
+      if (ui.returnDate) setReturnDate(ui.returnDate);
+    } catch {
+      /* no saved state yet */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      await apiClient.post("/api/esr/save", buildPayload());
+      setToast("ESR position saved");
+    } catch {
+      setToast("Could not save ESR position");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDownloadReport = async () => {
+    setDownloading(true);
+    try {
+      const payload = buildPayload();
+      const response = await apiClient.post("/api/esr/generate-report", payload, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `esr_report_${FINANCIAL_YEAR}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setToast("Could not generate ESR report");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <>
       <div className="mb-7">
@@ -102,6 +215,11 @@ export default function EsrFilingPage() {
         <p className="text-[13px] text-muted mt-1">
           Cabinet Resolution 57/2020 · UAE Ministry of Finance
         </p>
+        {toast && (
+          <div className="mt-3 inline-flex px-3 py-1.5 rounded-lg text-xs bg-gold-pale text-gold-lt border border-border-g">
+            {toast}
+          </div>
+        )}
       </div>
 
       {/* Section 1 — Activity test */}
@@ -253,6 +371,24 @@ export default function EsrFilingPage() {
                   <p className={`text-lg font-bold font-mono mt-1 ${c.highlight ? "text-red" : "text-white"}`}>{c.value}</p>
                 </div>
               ))}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-4">
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={saving}
+                className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-gradient-to-br from-gold to-gold-lt text-deep disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save Progress"}
+              </button>
+              <button
+                type="button"
+                onClick={onDownloadReport}
+                disabled={downloading}
+                className="px-4 py-2.5 rounded-lg text-sm font-semibold border border-border-g text-gold hover:bg-gold-pale disabled:opacity-60"
+              >
+                {downloading ? "Generating..." : "Download ESR Report"}
+              </button>
             </div>
           </div>
         </>

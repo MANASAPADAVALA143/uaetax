@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from middleware.auth import get_current_company_id
 from models import Invoice, Transaction
+from utils.audit import log_ai_audit
 
 router = APIRouter(prefix="/api/invoice", tags=["invoice-flow"])
 
@@ -787,12 +788,25 @@ def extract_invoice(
 
     try:
         msg = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=1200,
             temperature=0,
             messages=[{"role": "user", "content": user_content}],
         )
         raw = _extract_json(msg.content[0].text)
+        try:
+            log_ai_audit(
+                db,
+                company_id=company_id,
+                user_email="user",
+                action_type="ai_call",
+                feature="invoice_flow",
+                input_summary=f"Extract invoice {filename}",
+                output_summary=str(raw.get("vendor_name") or raw.get("invoice_number") or "")[:100],
+                status="success",
+            )
+        except Exception:
+            pass
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Claude extraction failed: {exc}") from exc
 
@@ -929,13 +943,26 @@ Return JSON only:
     print(f"[classify-and-risk] calling Claude for VAT classification", flush=True)
     try:
         msg = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=300,
             temperature=0.1,
             messages=[{"role": "user", "content": classify_prompt}],
         )
         vat_result = _extract_json(msg.content[0].text)
         print(f"[classify-and-risk] Claude VAT result: {vat_result.get('vat_treatment')}", flush=True)
+        try:
+            log_ai_audit(
+                db,
+                company_id=company_id,
+                user_email="user",
+                action_type="ai_call",
+                feature="invoice_flow",
+                input_summary=f"Classify invoice {payload.invoice_id}",
+                output_summary=f"Treatment: {vat_result.get('vat_treatment')}",
+                status="success",
+            )
+        except Exception:
+            pass
     except Exception as exc:
         print(f"[classify-and-risk] Claude VAT error: {exc}", flush=True)
         vat_result = {

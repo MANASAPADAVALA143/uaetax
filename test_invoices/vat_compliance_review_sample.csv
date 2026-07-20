@@ -1,0 +1,6 @@
+Invoice Ref,Date,Description,Vendor / Customer,Amount AED,VAT Rate,VAT Amount,Transaction Type
+SI-0905,01-04-2025,Sales invoice — wrong VAT rate applied,Al Noor Trading LLC,20000.00,10%,2000.00,sale
+PI-1107,05-04-2025,Toyota Land Cruiser — company vehicle purchase,Toyota UAE,95000.00,5%,4750.00,purchase
+PI-1103,10-04-2025,Client entertainment dinner — Marina Grill,Marina Grill Restaurant,18000.00,5%,900.00,purchase
+SI-0901,12-04-2025,Standard rated consulting services,Emirates Consulting FZE,50000.00,5%,2500.00,sale
+PI-0902,15-04-2025,Office rent — standard rated,DIFC Properties LLC,87500.00,5%,4375.00,purchase

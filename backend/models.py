@@ -37,6 +37,9 @@ class Company(Base):
     einvoicing_assessments = relationship("EInvoicingAssessment", back_populates="company")
     audit_logs = relationship("AuditLog", back_populates="company")
     user_companies = relationship("UserCompany", back_populates="company")
+    related_party_transactions = relationship(
+        "RelatedPartyTransaction", back_populates="company", cascade="all, delete-orphan"
+    )
 
 
 class UserCompany(Base):
@@ -103,8 +106,8 @@ class VATReturn(Base):
     box9_standard_rated_purchases = Column(Float, default=0.0)
     box10_zero_rated_purchases = Column(Float, default=0.0)
     box11_exempt_purchases = Column(Float, default=0.0)
-    status = Column(String(50), default="draft")  # draft / submitted / filed
-    submission_status = Column(String(50), default="not_submitted", nullable=False)
+    status = Column(String(50), default="generated")  # generated / filed (legacy: draft)
+    submission_status = Column(String(50), default="not_submitted", nullable=False)  # not_submitted / filed_manually
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     fta_reference_number = Column(String(255), nullable=True)
     submission_error = Column(String(500), nullable=True)
@@ -173,6 +176,25 @@ class CTReturn(Base):
     company = relationship("Company", back_populates="ct_returns")
 
 
+class RelatedPartyTransaction(Base):
+    """Manually maintained related-party transaction register (Transfer Pricing)."""
+    __tablename__ = "related_party_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    party_name = Column(String(255), nullable=False)
+    party_relationship = Column(String(100), nullable=False, default="Related party")
+    transaction_type = Column(String(100), nullable=False, default="Services")
+    amount_aed = Column(Float, nullable=False, default=0.0)
+    arms_length_aed = Column(Float, nullable=True)
+    method = Column(String(50), nullable=False, default="TNMM")  # CUP / TNMM / Cost Plus / RPM / PSM
+    doc_status = Column(String(20), nullable=False, default="partial")  # complete / partial / missing
+    notes = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company", back_populates="related_party_transactions")
+
+
 class FTASubmissionLog(Base):
     """Audit trail for VAT return submission attempts."""
     __tablename__ = "fta_submission_log"
@@ -235,6 +257,63 @@ class Invoice(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     company = relationship("Company", backref="invoices")
+
+
+class AdvancePayment(Base):
+    """Advance payment VAT tracking records."""
+    __tablename__ = "advance_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    description = Column(String(255), nullable=True)
+    order_value = Column(Float, nullable=False)
+    advance_amount = Column(Float, nullable=False)
+    advance_date = Column(Date, nullable=False, index=True)
+    delivery_date = Column(Date, nullable=False, index=True)
+    vat_rate = Column(Float, nullable=False, default=0.05)
+    status = Column(String(30), nullable=False, default="due_this_period")
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    company = relationship("Company", backref="advance_payments")
+
+
+class VATComplianceReview(Base):
+    """Persisted VAT compliance review (local SQLite + optional Supabase sync)."""
+    __tablename__ = "vat_compliance_reviews"
+
+    id = Column(String(36), primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(100), nullable=True)
+    company_trn = Column(String(50), nullable=True)
+    entity_type = Column(String(100), nullable=True)
+    compliance_rating = Column(String(50), nullable=True)
+    issues_count = Column(Integer, default=0)
+    net_vat_position = Column(Float, default=0.0)
+    output_vat = Column(Float, default=0.0)
+    input_vat = Column(Float, default=0.0)
+    analysis = Column(JSON, nullable=False)
+    row_count = Column(Integer, default=0)
+    source = Column(String(50), default="manual")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class VATAccountsReconciliation(Base):
+    """VAT GL vs Return reconciliation (local SQLite + optional Supabase sync)."""
+    __tablename__ = "vat_accounts_reconciliations"
+
+    id = Column(String(36), primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    period = Column(String(100), nullable=True)
+    company_trn = Column(String(50), nullable=True)
+    gl_input_vat = Column(Float, default=0.0)
+    gl_output_vat = Column(Float, default=0.0)
+    return_input_vat = Column(Float, default=0.0)
+    return_output_vat = Column(Float, default=0.0)
+    net_difference = Column(Float, default=0.0)
+    is_reconciled = Column(Boolean, default=False)
+    transactions = Column(JSON, nullable=True)
+    discrepancies = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class GLImportResult(Base):

@@ -52,6 +52,20 @@ interface PdfExtractionResult {
   error?: string;
 }
 
+interface AiReasoningDetail {
+  classification: string;
+  primary_reason: string;
+  evidence: string[];
+  uae_law_reference: string;
+  confidence_drivers: string[];
+  risk_level: string;
+  recovery_note?: string | null;
+  review_flag?: string | null;
+  fta_box?: string | null;
+  vat_treatment?: string;
+  confidence_score?: number;
+}
+
 interface SavedTransaction {
   id: number;
   date: string;
@@ -80,6 +94,7 @@ interface SavedTransaction {
   flags?: RiskFlag[];
   explanation?: string;
   ai_reasoning?: string;
+  reasoning_detail?: AiReasoningDetail | null;
   flag_reason?: string | null;
   transaction_side?: string;
   location?: string;
@@ -105,6 +120,40 @@ const UPLOAD_TABS: { key: UploadTab; label: string }[] = [
   { key: "manual", label: "Manual Entry" },
 ];
 
+function parseReasoningDetail(txn: SavedTransaction): AiReasoningDetail {
+  if (txn.reasoning_detail) return txn.reasoning_detail;
+  const raw = txn.ai_reasoning;
+  if (raw && raw.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw) as AiReasoningDetail;
+      if (parsed.primary_reason) return parsed;
+    } catch {
+      /* fall through */
+    }
+  }
+  return {
+    classification: (txn.vat_treatment || "standard_rated").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    primary_reason: txn.explanation || txn.ai_reasoning || "No structured reasoning available for this transaction.",
+    evidence: [],
+    uae_law_reference: "UAE VAT Law — Federal Decree-Law No. 8 of 2017",
+    confidence_drivers: [],
+    risk_level: "Medium",
+    recovery_note: null,
+    review_flag: txn.flag_reason,
+    fta_box: txn.box_number != null ? String(txn.box_number) : "N/A",
+    confidence_score: txn.confidence_score,
+  };
+}
+
+function treatmentBadgeClass(treatment?: string): string {
+  const t = (treatment || "").toLowerCase();
+  if (t === "reverse_charge") return "bg-[rgba(168,85,247,0.18)] text-purple-300 border-purple-400/40";
+  if (t === "zero_rated") return "bg-[rgba(78,168,255,0.12)] text-blue border border-[rgba(78,168,255,0.25)]";
+  if (t === "exempt") return "bg-gold-pale text-gold-lt border border-border-g";
+  if (t === "out_of_scope") return "bg-[rgba(122,132,153,0.14)] text-muted border border-[rgba(122,132,153,0.2)]";
+  return "bg-[rgba(45,212,160,0.12)] text-green border border-[rgba(45,212,160,0.25)]";
+}
+
 export default function VATClassifier() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -122,6 +171,7 @@ export default function VATClassifier() {
   const [tierCounts, setTierCounts] = useState({ auto_approve: 0, review_required: 0, blocked: 0 });
   const [bulkApproving, setBulkApproving] = useState(false);
   const [whyModal, setWhyModal] = useState<SavedTransaction | null>(null);
+  const [reasoningBusy, setReasoningBusy] = useState(false);
   const [extractedModal, setExtractedModal] = useState<SavedTransaction | null>(null);
   const [uploadTab, setUploadTab] = useState<UploadTab>("csv");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
@@ -162,6 +212,75 @@ export default function VATClassifier() {
   }, []);
 
   useEffect(() => { fetchSaved(); }, [fetchSaved]);
+
+  const handleApproveClassification = async (txn: SavedTransaction) => {
+    setReasoningBusy(true);
+    try {
+      await apiClient.patch(`/api/vat/transactions/${txn.id}/verify`, { is_verified: true });
+      await fetchSaved();
+      setWhyModal(null);
+    } catch {
+      setError("Could not approve classification.");
+    } finally {
+      setReasoningBusy(false);
+    }
+  };
+
+  const handleMarkReviewed = async (txn: SavedTransaction) => {
+    setReasoningBusy(true);
+    try {
+      await apiClient.patch(`/api/vat/transactions/${txn.id}/verify`, {
+        is_verified: true,
+        note: "Reviewed via AI Reasoning panel",
+      });
+      await fetchSaved();
+      setWhyModal(null);
+    } catch {
+      setError("Could not mark as reviewed.");
+    } finally {
+      setReasoningBusy(false);
+    }
+  };
+
+  const handleOverrideClassification = async (txn: SavedTransaction) => {
+    const next = window.prompt(
+      "Override VAT treatment (standard_rated, zero_rated, exempt, out_of_scope, reverse_charge):",
+      txn.vat_treatment || "standard_rated"
+    );
+    if (!next) return;
+    setReasoningBusy(true);
+    try {
+      await apiClient.patch(`/api/vat/transactions/${txn.id}/verify`, {
+        is_verified: true,
+        override_treatment: next.trim(),
+        note: "Manual override from AI Reasoning panel",
+      });
+      await fetchSaved();
+      setWhyModal(null);
+    } catch {
+      setError("Could not override classification.");
+    } finally {
+      setReasoningBusy(false);
+    }
+  };
+
+  const handleCopyReasoning = async (detail: AiReasoningDetail) => {
+    const text = [
+      `Classification: ${detail.classification}`,
+      detail.primary_reason,
+      "",
+      "Evidence:",
+      ...detail.evidence.map((e) => `• ${e}`),
+      "",
+      detail.uae_law_reference,
+      detail.recovery_note ? `\nRecovery: ${detail.recovery_note}` : "",
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -1152,26 +1271,159 @@ export default function VATClassifier() {
       )}
       </>)}
 
-      {whyModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setWhyModal(null)}
-        >
-          <div
-            className="bg-gradient-to-br from-card to-[#071228] border border-border rounded-2xl max-w-lg w-full p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Classification Reasoning</h3>
-              <button type="button" onClick={() => setWhyModal(null)} className="text-muted hover:text-white text-xl leading-none">×</button>
-            </div>
-            <p className="text-[12px] text-muted mb-3 font-mono truncate">{whyModal.description}</p>
-            <pre className="text-[12px] text-white whitespace-pre-wrap font-sans leading-relaxed bg-[rgba(4,12,30,0.6)] rounded-lg p-4 border border-border">
-              {whyModal.explanation || whyModal.ai_reasoning || "No explanation available."}
-            </pre>
-          </div>
-        </div>
-      )}
+      {whyModal && (() => {
+        const detail = parseReasoningDetail(whyModal);
+        const conf = Math.round(detail.confidence_score ?? whyModal.confidence_score ?? 0);
+        return (
+          <>
+            <div
+              className="fixed inset-0 z-50 bg-black/50 md:bg-black/40"
+              onClick={() => !reasoningBusy && setWhyModal(null)}
+              aria-hidden
+            />
+            <aside
+              className="fixed inset-y-0 right-0 z-[60] w-full md:w-[420px] bg-gradient-to-b from-[#071228] to-card border-l border-border shadow-2xl flex flex-col overflow-hidden"
+              role="dialog"
+              aria-label="AI Reasoning"
+            >
+              <div className="p-5 border-b border-border flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-gold font-mono mb-1">AI Reasoning</p>
+                  <h3 className="text-sm font-semibold text-white leading-snug line-clamp-2">
+                    {whyModal.description}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWhyModal(null)}
+                  disabled={reasoningBusy}
+                  className="text-muted hover:text-white text-xl leading-none shrink-0"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <section>
+                  <span
+                    className={`inline-block px-3 py-1.5 rounded-full text-xs font-bold border ${treatmentBadgeClass(
+                      detail.vat_treatment || whyModal.vat_treatment
+                    )}`}
+                  >
+                    {detail.classification}
+                  </span>
+                  <p className="text-[11px] text-blue-300 mt-2 font-mono">{detail.uae_law_reference}</p>
+                </section>
+
+                <section>
+                  <h4 className="text-[10px] uppercase tracking-wider text-muted font-mono mb-2">Primary Reason</h4>
+                  <p className="text-sm text-white leading-relaxed">{detail.primary_reason}</p>
+                </section>
+
+                {detail.evidence.length > 0 && (
+                  <section>
+                    <h4 className="text-[10px] uppercase tracking-wider text-muted font-mono mb-2">Evidence</h4>
+                    <ul className="space-y-1.5 text-sm text-muted">
+                      {detail.evidence.map((item) => (
+                        <li key={item} className="flex gap-2">
+                          <span className="text-green shrink-0">✓</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {detail.confidence_drivers.length > 0 && (
+                  <section>
+                    <h4 className="text-[10px] uppercase tracking-wider text-muted font-mono mb-2">Confidence Drivers</h4>
+                    <ul className="space-y-1 text-sm text-muted">
+                      {detail.confidence_drivers.map((d) => (
+                        <li key={d}>{d}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-[10px] uppercase tracking-wider text-muted font-mono">Confidence</h4>
+                    <span className="text-xs font-mono text-gold-lt">{conf}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[rgba(78,168,255,0.12)] overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-gold to-gold-lt transition-all"
+                      style={{ width: `${Math.min(100, Math.max(0, conf))}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted2 mt-1">Risk level: {detail.risk_level}</p>
+                </section>
+
+                <section className="rounded-lg border border-[rgba(30,58,95,0.8)] bg-[rgba(30,58,95,0.35)] p-3">
+                  <h4 className="text-[10px] uppercase tracking-wider text-blue-300 font-mono mb-1">UAE Law Reference</h4>
+                  <p className="text-xs text-white">{detail.uae_law_reference}</p>
+                  {detail.fta_box && (
+                    <p className="text-[10px] text-muted2 mt-1 font-mono">FTA Box: {detail.fta_box}</p>
+                  )}
+                </section>
+
+                {detail.recovery_note && (
+                  <section className="rounded-lg border border-border-g bg-gold-pale/10 p-3">
+                    <h4 className="text-[10px] uppercase tracking-wider text-gold font-mono mb-1">VAT Recovery Note</h4>
+                    <p className="text-xs text-gold-lt leading-relaxed">{detail.recovery_note}</p>
+                  </section>
+                )}
+
+                {(detail.review_flag || whyModal.flag_reason) && (
+                  <section className="rounded-lg border border-amber/40 bg-[rgba(251,191,36,0.1)] p-3">
+                    <h4 className="text-[10px] uppercase tracking-wider text-amber font-mono mb-1">Review Flag</h4>
+                    <p className="text-xs text-amber leading-relaxed">
+                      ⚠️ {detail.review_flag || whyModal.flag_reason}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={reasoningBusy}
+                      onClick={() => handleMarkReviewed(whyModal)}
+                      className="mt-3 text-[11px] font-semibold px-3 py-1.5 rounded border border-amber/50 text-amber hover:bg-amber/10 disabled:opacity-50"
+                    >
+                      Mark as Reviewed
+                    </button>
+                  </section>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-border flex flex-col gap-2 bg-[rgba(4,12,30,0.6)]">
+                <button
+                  type="button"
+                  disabled={reasoningBusy || whyModal.is_verified}
+                  onClick={() => handleApproveClassification(whyModal)}
+                  className="w-full py-2 rounded-lg text-xs font-bold bg-gradient-to-br from-gold to-gold-lt text-deep disabled:opacity-50"
+                >
+                  ✓ Approve Classification
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={reasoningBusy}
+                    onClick={() => handleOverrideClassification(whyModal)}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold border border-red/40 text-red hover:bg-red/10 disabled:opacity-50"
+                  >
+                    ✗ Override
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reasoningBusy}
+                    onClick={() => handleCopyReasoning(detail)}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold border border-border-g text-gold-lt hover:bg-gold-pale/20"
+                  >
+                    📋 Copy reasoning
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </>
+        );
+      })()}
 
       {extractedModal && (
         <div

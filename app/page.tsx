@@ -12,7 +12,7 @@ export default function Home() {
         <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center text-center px-10 py-20">
           <div className="inline-flex items-center gap-2 px-[18px] py-1.5 bg-gold-pale border border-border-g rounded-full text-xs font-medium text-gold-lt tracking-widest uppercase mb-10 animate-[fadeUp_0.7s_ease_both]">
             <span className="w-1.5 h-1.5 rounded-full bg-green shadow-[0_0_8px_#2DD4A0] animate-[blink_2s_infinite]" />
-            Now live — UAE Corporate Tax + VAT Automation
+            Now live — UAE Corporate Tax + VAT workflows
           </div>
 
           <h1 className="font-playfair text-[clamp(48px,7.5vw,88px)] font-black leading-[1.04] tracking-[-0.025em] mb-7 animate-[fadeUp_0.7s_0.08s_ease_both]">
@@ -23,8 +23,8 @@ export default function Home() {
           </h1>
 
           <p className="text-[clamp(16px,2.2vw,19px)] text-muted max-w-[580px] leading-[1.7] mx-auto mb-12 font-normal animate-[fadeUp_0.7s_0.16s_ease_both]">
-            The only platform built for UAE's unique tax landscape — Corporate Tax (9%),
-            VAT (5%), ESR, Transfer Pricing, FTA filing — all automated for CA firms and corporates.
+            Built for UAE&apos;s tax landscape — Corporate Tax (9%), VAT (5%), ESR, and EmaraTax-ready
+            return packs for CA firms and corporates.
           </p>
 
           <div className="flex gap-3.5 justify-center mb-18 animate-[fadeUp_0.7s_0.24s_ease_both]">
@@ -61,18 +61,18 @@ export default function Home() {
             </div>
             <div className="flex-1 py-7 px-4 text-center border-r border-[rgba(78,168,255,0.15)]">
               <span className="font-playfair text-4xl font-black text-gold-lt block leading-none mb-1.5">
-                98%
+                AI
               </span>
               <span className="text-[11px] text-muted uppercase tracking-widest font-medium">
-                VAT Accuracy
+                VAT Classification
               </span>
             </div>
             <div className="flex-1 py-7 px-4 text-center">
               <span className="font-playfair text-4xl font-black text-gold-lt block leading-none mb-1.5">
-                3 min
+                FTA
               </span>
               <span className="text-[11px] text-muted uppercase tracking-widest font-medium">
-                Return Generated
+                Ready Exports
               </span>
             </div>
           </div>
@@ -85,26 +85,27 @@ export default function Home() {
               // UAE Tax Coverage
             </span>
             <h2 className="font-playfair text-[clamp(30px,4vw,46px)] font-bold leading-[1.12] mb-3.5">
-              12 Use Cases.<br />Total Compliance.
+              12 Use Cases.<br />Built for UAE.
             </h2>
-            <p className="text-base text-muted max-w-[500px] leading-[1.7] mb-13">
-              Every UAE tax obligation — automated, tracked, and filed. Specific to the UAE regulatory environment, not a generic tool.
+            <p className="text-base text-muted max-w-[520px] leading-[1.7] mb-13">
+              Prepare accurate returns and working papers for EmaraTax filing — specific to the UAE
+              regulatory environment, not a generic overseas tool.
             </p>
 
             <div className="grid grid-cols-4 gap-3.5">
               {[
-                { n: "01", title: "UAE Corporate Tax (9%)", text: "Taxable income computation, CT return preparation and e-filing to FTA. Introduced June 2023." },
-                { n: "02", title: "VAT Compliance (5%)", text: "Classify transactions, calculate input/output VAT, generate all 8 FTA return boxes." },
-                { n: "03", title: "Free Zone Tax Treatment", text: "QFZP eligibility checker — 0% qualifying income vs 9% non-qualifying auto-split." },
-                { n: "04", title: "Transfer Pricing Docs", text: "Local file + master file generation for UAE MNCs with GCC operations." },
-                { n: "05", title: "Excise Tax Filing", text: "Auto-filing for tobacco, energy drinks, carbonated drinks — excise duty calculations." },
-                { n: "06", title: "ESR Compliance", text: "Annual notification + report auto-generation. Deadline tracking for UAE entities." },
-                { n: "07", title: "CbCR Reporting", text: "Country-by-Country Reporting for groups above AED 3.15B. Auto-filing to FTA." },
-                { n: "08", title: "RERA Compliance", text: "Escrow account accounting + IFRS 15 revenue recognition for UAE real estate CA firms." },
-                { n: "09", title: "GCC Group Consolidation", text: "Multi-entity consolidation for UAE holding companies with KSA, Qatar, Bahrain subs." },
-                { n: "10", title: "IFRS to UAE-GAAP Mapping", text: "Auto-mapping for CA firms serving UAE listed companies. Dual reporting automation." },
-                { n: "11", title: "FTA Portal Integration", text: "Direct e-filing via FTA API. No manual portal entry. Status tracking included." },
-                { n: "12", title: "VAT Recon Bot", text: "Cross-check VAT output tax vs invoices. Flags mismatches before filing. AED-level precision." },
+                { n: "01", title: "UAE Corporate Tax (9%)", text: "Taxable income computation and CT return draft PDF for review before you file on EmaraTax." },
+                { n: "02", title: "VAT Compliance (5%)", text: "Classify transactions, calculate input/output VAT, and generate EmaraTax-ready VAT201 box packs." },
+                { n: "03", title: "Free Zone Tax Treatment", text: "QFZP eligibility checker — qualifying vs non-qualifying income split for free zone entities." },
+                { n: "04", title: "Transfer Pricing (Beta)", text: "Manual related-party register + MD 97/2023 disclosure threshold check (AED 3M / 40M)." },
+                { n: "05", title: "Excise Tax", text: "Roadmap: excise calculations for tobacco and beverages — not in the current release." },
+                { n: "06", title: "ESR Compliance", text: "Economic substance tests, filing status tracking, and PDF report generation for UAE entities." },
+                { n: "07", title: "CbCR Reporting", text: "Enterprise roadmap only — for MNE groups above AED 3.15B consolidated revenue." },
+                { n: "08", title: "RERA Compliance", text: "Roadmap: escrow and IFRS 15 support for UAE real estate practices." },
+                { n: "09", title: "GCC Group Consolidation", text: "Enterprise roadmap: multi-entity consolidation for UAE holdings with GCC subsidiaries." },
+                { n: "10", title: "IFRS to UAE-GAAP Mapping", text: "Roadmap: dual reporting support for CA firms serving UAE listed companies." },
+                { n: "11", title: "EmaraTax Filing Packs", text: "Export VAT201 worksheets and box summaries for manual entry or portal template upload — not auto-submit." },
+                { n: "12", title: "VAT Recon Bot", text: "Cross-check VAT return boxes vs classified transactions. Flags mismatches before you file on EmaraTax." },
               ].map((uc) => (
                 <div
                   key={uc.n}
@@ -151,10 +152,12 @@ export default function Home() {
                   VAT Intelligence Engine
                 </div>
                 <p className="text-sm text-muted leading-[1.72] mb-5.5">
-                  AI classifies every transaction using UAE VAT Decree rules — standard-rated (5%), zero-rated, exempt, out-of-scope, or reverse charge. Handles free zone vs mainland complexity automatically. Generates all 8 FTA return boxes and runs reconciliation before you file.
+                  AI classifies transactions using UAE VAT rules — standard-rated (5%), zero-rated, exempt,
+                  out-of-scope, or reverse charge. Generates VAT201 box packs for EmaraTax filing and runs
+                  reconciliation before you submit on the FTA portal.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {["Transaction Classifier", "FTA Portal Filing", "VAT Recon Bot", "Free Zone Rules", "Return Generator"].map((tag) => (
+                  {["Transaction Classifier", "EmaraTax Export Pack", "VAT Recon Bot", "Free Zone Rules", "Return Generator"].map((tag) => (
                     <span
                       key={tag}
                       className="px-3 py-1 rounded-full text-[11px] font-medium font-mono tracking-wide bg-gold-pale text-gold-lt border border-border-g"
@@ -165,9 +168,9 @@ export default function Home() {
                 </div>
               </div>
               {[
-                { n: "Module 02", icon: "🏛️", title: "Corporate Tax Engine", desc: "9% CT liability calculator with QFZP eligibility checker. Determines qualifying vs non-qualifying income. Prepares and e-files CT returns directly.", tags: ["CT Return Filing", "QFZP Checker", "0% Free Zone Rate"], bg: "bg-[rgba(78,168,255,0.12)]" },
-                { n: "Module 03", icon: "⚖️", title: "Regulatory Compliance Suite", desc: "ESR notifications, Excise Tax, Transfer Pricing local files, CbCR reporting, and RERA compliance — all automated with AI-generated documentation.", tags: ["ESR Filing", "Transfer Pricing", "CbCR", "RERA"], bg: "bg-[rgba(45,212,160,0.12)]" },
-                { n: "Module 04 — Enterprise", icon: "🌐", title: "GCC Group & Reporting", desc: "Multi-entity GCC consolidation for UAE holding companies. IFRS to UAE-GAAP auto-mapping. Intercompany elimination automation.", tags: ["GCC Consolidation", "IFRS Mapping", "IC Elimination"], bg: "bg-[rgba(255,107,107,0.12)]" },
+                { n: "Module 02", icon: "🏛️", title: "Corporate Tax Engine", desc: "9% CT liability calculator with QFZP eligibility checker. Prepares CT return draft PDFs for review before you file on EmaraTax.", tags: ["CT Return Draft", "QFZP Checker", "0% Free Zone Rate"], bg: "bg-[rgba(78,168,255,0.12)]" },
+                { n: "Module 03", icon: "⚖️", title: "Regulatory Compliance Suite", desc: "ESR filing workflows, Transfer Pricing register (Beta), and documentation checklists. CbCR and Excise remain Enterprise roadmap items.", tags: ["ESR Filing", "TP Register (Beta)", "Checklists"], bg: "bg-[rgba(45,212,160,0.12)]" },
+                { n: "Module 04 — Enterprise", icon: "🌐", title: "GCC Group & Reporting", desc: "Multi-entity GCC consolidation and IFRS mapping — Enterprise roadmap. Contact us if your group needs multi-jurisdiction reporting.", tags: ["GCC Consolidation", "IFRS Mapping", "Roadmap"], bg: "bg-[rgba(255,107,107,0.12)]" },
               ].map((mod) => (
                 <div
                   key={mod.n}
@@ -210,16 +213,16 @@ export default function Home() {
             <h2 className="font-playfair text-[clamp(30px,4vw,46px)] font-bold leading-[1.12] mb-3.5">
               Clear Pricing.<br />No Surprises.
             </h2>
-            <p className="text-base text-muted max-w-[500px] leading-[1.7] mb-13">
-              Choose by who you are. All plans include FTA integration, AI classification, and UAE tax law RAG.
+            <p className="text-base text-muted max-w-[520px] leading-[1.7] mb-13">
+              Choose by who you are. All plans include AI VAT classification and EmaraTax-ready export packs.
             </p>
 
             <div className="grid grid-cols-4 gap-4">
               {[
-                { who: "Indian CA Firms", price: "$1,500", per: "per month", features: ["Module 1 — VAT Intelligence", "Module 2 — Corporate Tax", "Up to 5 UAE client companies", "FTA portal integration", "Email support"], btn: "Get Started", featured: false },
-                { who: "UAE CA / Audit Firms", price: "$4,000", per: "per month", features: ["All 4 Modules", "Unlimited client companies", "ESR + Transfer Pricing", "Priority support + onboarding", "Dedicated account manager"], btn: "Start Free Trial", featured: true },
-                { who: "UAE Corporates", price: "$3,000", per: "per month", features: ["Modules 1 + 2 + 3", "Single entity filing", "ESR + Excise Tax", "CFO dashboard included", "Standard support"], btn: "Get Started", featured: false },
-                { who: "GCC Enterprise", price: "Custom", per: "tailored pricing", features: ["All 4 Modules + white-label", "GCC consolidation", "CbCR + Transfer Pricing", "SLA-backed support", "On-prem deployment option"], btn: "Contact Sales", featured: false },
+                { who: "Indian CA Firms", price: "$1,500", per: "per month", features: ["Module 1 — VAT Intelligence", "Module 2 — Corporate Tax", "Up to 5 UAE client companies", "EmaraTax-ready VAT exports", "Email support"], btn: "Get Started", featured: false },
+                { who: "UAE CA / Audit Firms", price: "$4,000", per: "per month", features: ["Modules 1–3 (live features)", "Unlimited client companies", "ESR + TP register (Beta)", "Priority support + onboarding", "Dedicated account manager"], btn: "Start Free Trial", featured: true },
+                { who: "UAE Corporates", price: "$3,000", per: "per month", features: ["Modules 1 + 2 + ESR", "Single entity workflows", "VAT recon + compliance review", "CFO dashboard included", "Standard support"], btn: "Get Started", featured: false },
+                { who: "GCC Enterprise", price: "Custom", per: "tailored pricing", features: ["All live modules + white-label", "GCC consolidation (roadmap)", "CbCR for qualifying MNEs (roadmap)", "SLA-backed support", "On-prem deployment option"], btn: "Contact Sales", featured: false },
               ].map((p) => (
                 <div
                   key={p.who}
@@ -274,7 +277,7 @@ export default function Home() {
           <h2 className="font-playfair text-[clamp(36px,5vw,58px)] font-black leading-[1.08] mb-5">
             UAE Tax is Complex.<br />
             <em className="italic bg-gradient-to-r from-gold to-gold-lt bg-clip-text text-transparent">
-              GulfTax AI isn't.
+              UAE Tax isn&apos;t.
             </em>
           </h2>
           <p className="text-[17px] text-muted max-w-[480px] mx-auto mb-11 leading-[1.65]">
@@ -295,14 +298,14 @@ export default function Home() {
             </a>
           </div>
           <div className="text-[13px] text-muted2 mt-5">
-            No credit card required · UAE VAT + CT ready · FTA integrated
+            No credit card required · UAE VAT + CT ready · EmaraTax export packs
           </div>
         </div>
 
         {/* FOOTER */}
         <footer className="border-t border-border px-12 py-9 flex items-center justify-between relative z-10">
           <div className="font-playfair text-[17px] font-bold text-gold-lt">
-            GulfTax AI
+            UAE Tax
           </div>
           <ul className="flex gap-7 list-none">
             <li>
@@ -317,7 +320,7 @@ export default function Home() {
             </li>
             <li>
               <a href="#" className="text-muted text-[13px] no-underline hover:text-white transition-colors">
-                FTA Compliance
+                EmaraTax Workflows
               </a>
             </li>
             <li>

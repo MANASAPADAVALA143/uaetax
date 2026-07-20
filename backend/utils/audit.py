@@ -9,6 +9,39 @@ from sqlalchemy.orm import Session
 from models import AuditLog
 
 
+def log_ai_audit(
+    db: Session,
+    *,
+    company_id: Optional[int] = None,
+    user_email: str = "system",
+    action_type: str = "ai_call",
+    feature: str,
+    input_summary: str = "",
+    output_summary: str = "",
+    status: str = "success",
+) -> Optional[AuditLog]:
+    """Fire-and-forget audit log for Claude AI calls."""
+    try:
+        return log_audit_event(
+            db=db,
+            company_id=company_id,
+            actor=user_email,
+            entity_type=feature,
+            action=action_type,
+            before_state={
+                "input_summary": (input_summary or "")[:500],
+                "status": status,
+            },
+            after_state={
+                "output_summary": (output_summary or "")[:500],
+                "status": status,
+            },
+        )
+    except Exception as exc:  # pragma: no cover
+        print(f"AI audit logging failed: {exc}", file=sys.stderr)
+        return None
+
+
 def log_audit_event(
     db: Session,
     entity_type: str,

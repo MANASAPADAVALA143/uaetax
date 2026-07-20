@@ -89,13 +89,13 @@ function KpiSkeleton() {
 }
 
 export default function DashboardOverview() {
-  const { activeCompany } = useAuth();
+  const { activeCompany, loading: authLoading } = useAuth();
   const companyId = useCompanyId();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
 
   useEffect(() => {
-    if (!companyId) return;
+    if (authLoading) return;
     let cancelled = false;
     (async () => {
       try {
@@ -117,8 +117,7 @@ export default function DashboardOverview() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId]);
+  }, [authLoading, companyId]);
 
   const s = loadState === "ok" ? summary : null;
 
@@ -265,7 +264,13 @@ export default function DashboardOverview() {
             </p>
           )}
         </div>
-        <div className="flex gap-2.5 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+          <Link
+            href="/dashboard/smart-upload"
+            className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-xs font-bold cursor-pointer bg-gradient-to-br from-gold to-gold-lt text-deep shadow-[0_4px_18px_rgba(201,168,76,0.38)] hover:shadow-[0_6px_24px_rgba(201,168,76,0.52)] hover:-translate-y-px transition-all w-full sm:min-w-[280px]"
+          >
+            📂 Upload Master File — All Modules
+          </Link>
           <Link
             href="/dashboard/vat-classifier"
             className="inline-flex items-center justify-center px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer border border-border-g text-gold hover:bg-gold-pale transition-all"
@@ -274,7 +279,7 @@ export default function DashboardOverview() {
           </Link>
           <Link
             href="/dashboard/vat-return"
-            className="inline-flex items-center justify-center px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer bg-gradient-to-br from-gold to-gold-lt text-deep shadow-[0_4px_18px_rgba(201,168,76,0.38)] hover:shadow-[0_6px_24px_rgba(201,168,76,0.52)] hover:-translate-y-px transition-all"
+            className="inline-flex items-center justify-center px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer border border-border-g text-gold hover:bg-gold-pale transition-all"
           >
             ⚡ Generate VAT Return
           </Link>

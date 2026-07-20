@@ -14,9 +14,21 @@ from models import Transaction, Company, Invoice
 
 router = APIRouter(prefix="/api/fta", tags=["fta-reports"])
 
+SALE_PREFIXES = ("SI-", "IC-", "DS-", "BD-")
+PURCHASE_PREFIXES = ("PI-", "AP-", "CT-")
+
+
+def _is_sale_tx(t: Transaction) -> bool:
+    inv = (t.invoice_number or "").upper()
+    if any(inv.startswith(p) for p in SALE_PREFIXES):
+        return True
+    if any(inv.startswith(p) for p in PURCHASE_PREFIXES):
+        return False
+    return (t.transaction_type or "").lower() == "sale"
+
 
 def _tx_side(t: Transaction) -> str:
-    return "sale" if t.transaction_type == "sale" else "purchase"
+    return "sale" if _is_sale_tx(t) else "purchase"
 
 
 @router.get("/summary")
@@ -35,8 +47,8 @@ def fta_summary(
         )
     ).all()
 
-    sales = [t for t in txns if t.transaction_type == "sale"]
-    purchases = [t for t in txns if t.transaction_type == "purchase"]
+    sales = [t for t in txns if _is_sale_tx(t)]
+    purchases = [t for t in txns if not _is_sale_tx(t)]
 
     def amt(lst): return round(sum(t.amount_aed for t in lst), 2)
     def vat(lst): return round(sum(t.vat_amount_aed or 0 for t in lst), 2)

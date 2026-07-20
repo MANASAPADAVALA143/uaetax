@@ -211,7 +211,7 @@ export default function SettingsPage() {
           <div className="font-mono text-[11px] text-gold uppercase tracking-[0.1em] mb-1.5">// Settings</div>
           <h2 className="font-playfair text-[26px] font-bold">Workspace settings</h2>
           <p className="text-[13px] text-muted mt-1">
-            {user?.email ? `Signed in as ${user.email}` : "Configure your GulfTax workspace"}
+            {user?.email ? `Signed in as ${user.email}` : "Configure your UAE Tax workspace"}
           </p>
         </div>
         <button

@@ -16,7 +16,7 @@ from database import get_db
 from models import UserCompany, Company
 
 # ── Role hierarchy ──────────────────────────────────────────────
-ROLE_ORDER = {"member": 0, "admin": 1, "owner": 2}
+ROLE_ORDER = {"member": 0, "analyst": 1, "admin": 1, "owner": 2}
 
 
 # ── JWT verification ────────────────────────────────────────────
@@ -134,15 +134,36 @@ async def get_current_company_id(
 def require_role(minimum_role: str):
     """
     Dependency factory: require at least `minimum_role` in the active company.
-    Usage: some_val = Depends(require_role("admin"))
+    Usage: auth: dict = Depends(require_role("admin"))
     """
     min_level = ROLE_ORDER.get(minimum_role, 0)
 
     async def _check(
         x_company_id: Optional[str] = Header(default=None, alias="X-Company-ID"),
-        user: dict = Depends(get_current_user),
+        authorization: Optional[str] = Header(default=None),
         db: Session = Depends(get_db),
     ) -> dict:
+        if _LOCAL_DEV:
+            cid: Optional[int] = None
+            if x_company_id:
+                try:
+                    cid = int(x_company_id)
+                except ValueError:
+                    pass
+            if cid is None:
+                first = db.query(Company).order_by(Company.id).first()
+                cid = first.id if first else 1
+            return {
+                "user": {"user_id": "local-dev", "email": "local-dev@localhost"},
+                "company_id": cid,
+                "role": "owner",
+            }
+
+        if not authorization or not authorization.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+        token = authorization.split(" ", 1)[1].strip()
+        user = _verify_jwt(token)
+
         if not x_company_id:
             raise HTTPException(status_code=400, detail="Missing X-Company-ID header")
         try:

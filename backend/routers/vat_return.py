@@ -6,7 +6,7 @@ import secrets
 import sys
 from datetime import date, datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Body
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, case
@@ -38,6 +38,8 @@ from models import (
     AuditLog,
 )
 from services.vat_decision_tree import classify_with_decision_tree
+from utils.audit import log_ai_audit, log_audit_event
+from utils.output_validator import validate_vat_return_boxes
 
 load_dotenv()
 
@@ -89,6 +91,18 @@ class VATSubmitResponse(BaseModel):
     submitted_at: Optional[datetime] = None
     fta_reference_number: Optional[str] = None
     submission_error: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+
+
+class MarkFiledRequest(BaseModel):
+    """Client confirms they filed this return on EmaraTax (manual filing)."""
+    fta_reference_number: Optional[str] = Field(
+        None,
+        max_length=255,
+        description="Optional EmaraTax acknowledgement / reference number",
+    )
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 def _transaction_side(t: Transaction) -> str:
@@ -102,7 +116,30 @@ def _resolve_classification(t: Transaction) -> Dict[str, Any]:
         amount_aed=float(t.amount_aed or 0),
         vendor_or_customer=t.vendor_or_customer,
         transaction_type=(getattr(t, "transaction_type", None) or "purchase"),
+        vendor_trn=getattr(t, "vendor_trn", None),
     )
+
+
+def _is_reverse_charge_purchase(t: Transaction, r: Dict[str, Any]) -> bool:
+    """
+    Art. 48 reverse charge — expense must appear in Box 6 and VAT in Box 2 + Box 7.
+
+    Honor stored reverse_charge even when the decision tree re-resolves to zero_rated /
+    exempt (otherwise RC net drops out of Box 6 entirely).
+    """
+    explicit_side = _effective_side(t, r)
+    if explicit_side == "sale":
+        return False
+    if explicit_side != "purchase":
+        return False
+    stored = (getattr(t, "vat_treatment", None) or "").lower()
+    if stored == "reverse_charge":
+        return True
+    if (r.get("vat_treatment") or "").lower() == "reverse_charge":
+        return True
+    if r.get("reverse_charge_flag"):
+        return True
+    return False
 
 
 def _apply_calculated_boxes(vat_return: VATReturn, transactions: List[Transaction]) -> VATReturn:
@@ -147,6 +184,60 @@ def _is_entertainment(t: Transaction) -> bool:
     return any(kw in desc for kw in _ENTERTAINMENT_KWS)
 
 
+def _normalize_treatment(value: Optional[str]) -> str:
+    t = (value or "").lower().replace(" ", "_").replace("-", "_")
+    if t in ("standard", "standard_rated"):
+        return "standard_rated"
+    if t in ("zero", "zero_rated"):
+        return "zero_rated"
+    if t == "exempt":
+        return "exempt"
+    if t in ("out_of_scope", "outofscope"):
+        return "out_of_scope"
+    if t == "reverse_charge":
+        return "reverse_charge"
+    if t in ("entertainment_restricted", "entertainment"):
+        return "entertainment_restricted"
+    if t == "import_vat":
+        return "import_vat"
+    return t or "standard_rated"
+
+
+def _infer_side_from_invoice(t: Transaction) -> Optional[str]:
+    inv = (getattr(t, "invoice_number", None) or "").upper().strip()
+    if inv.startswith(("SI-", "IC-", "DS-", "BD-")):
+        return "sale"
+    if inv.startswith(("PI-", "AP-", "CT-")):
+        return "purchase"
+    return None
+
+
+def _effective_side(t: Transaction, r: Dict[str, Any]) -> str:
+    """Authoritative sale/purchase side — invoice prefix, then DB type, then box."""
+    inferred = _infer_side_from_invoice(t)
+    if inferred:
+        return inferred
+    explicit = (getattr(t, "transaction_type", None) or "").lower().strip()
+    if explicit in ("sale", "purchase"):
+        return explicit
+    box = getattr(t, "box_number", None)
+    if box in (1, 3, 4):
+        return "sale"
+    if box in (7, 9, 10, 11):
+        return "purchase"
+    return (r.get("transaction_side") or "purchase").lower()
+
+
+def _effective_treatment(t: Transaction, r: Dict[str, Any]) -> str:
+    """Prefer stored vat_treatment from classifier upload over re-resolved tree."""
+    stored = _normalize_treatment(getattr(t, "vat_treatment", None))
+    if stored and stored != "standard_rated":
+        return stored
+    if getattr(t, "vat_treatment", None):
+        return stored
+    return _normalize_treatment(r.get("vat_treatment"))
+
+
 def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, float]:
     """
     Calculate all 11 FTA VAT return boxes from verified transactions.
@@ -156,35 +247,48 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     """
     enriched = [(t, _resolve_classification(t)) for t in transactions]
 
-    def _side(r: Dict[str, Any]) -> str:
-        return (r.get("transaction_side") or "purchase").lower()
+    def _is_purchase(t: Transaction, r: Dict[str, Any]) -> bool:
+        return _effective_side(t, r) == "purchase"
 
-    def _treat(r: Dict[str, Any]) -> str:
-        return (r.get("vat_treatment") or "standard_rated").lower()
+    def _is_sale(t: Transaction, r: Dict[str, Any]) -> bool:
+        return _effective_side(t, r) == "sale"
+
+    def _treat(t: Transaction, r: Dict[str, Any]) -> str:
+        return _effective_treatment(t, r)
 
     def _amt(items: list) -> float:
         return sum(t.amount_aed or 0 for t in items)
 
-    # ── Split by resolved side and treatment ────────────────────────────────
-    sales_std = [t for t, r in enriched if _side(r) == "sale" and _treat(r) == "standard_rated"]
-    sales_zero = [t for t, r in enriched if _side(r) == "sale" and _treat(r) == "zero_rated"]
-    sales_ex = [t for t, r in enriched if _side(r) == "sale" and _treat(r) == "exempt"]
+    # ── Split by stored side + treatment (Boxes 1–5 = sales, 6–11 = purchases) ─
+    sales_std = [
+        t for t, r in enriched
+        if _is_sale(t, r) and _treat(t, r) == "standard_rated"
+    ]
+    sales_zero = [
+        t for t, r in enriched
+        if _is_sale(t, r) and _treat(t, r) == "zero_rated"
+    ]
+    sales_ex = [
+        t for t, r in enriched
+        if _is_sale(t, r) and _treat(t, r) == "exempt"
+    ]
 
     purch_std_all = [
         t for t, r in enriched
-        if _side(r) == "purchase" and _treat(r) in ("standard_rated", "entertainment_restricted")
+        if _is_purchase(t, r) and _treat(t, r) in ("standard_rated", "entertainment_restricted")
     ]
-    purch_rc = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "reverse_charge"]
-    purch_import = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "import_vat"]
-    purch_zero = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "zero_rated"]
-    purch_exempt = [t for t, r in enriched if _side(r) == "purchase" and _treat(r) == "exempt"]
+    purch_rc = [t for t, r in enriched if _is_reverse_charge_purchase(t, r)]
+    purch_import = [t for t, r in enriched if _is_purchase(t, r) and _treat(t, r) == "import_vat"]
+    purch_zero = [t for t, r in enriched if _is_purchase(t, r) and _treat(t, r) == "zero_rated"]
+    purch_exempt = [t for t, r in enriched if _is_purchase(t, r) and _treat(t, r) == "exempt"]
 
     purch_std_entertainment = [
         t for t, r in enriched
-        if _side(r) == "purchase"
-        and (_treat(r) == "entertainment_restricted" or r.get("entertainment_flag"))
+        if _is_purchase(t, r)
+        and (_treat(t, r) == "entertainment_restricted" or r.get("entertainment_flag"))
     ]
-    purch_std = [t for t in purch_std_all if t not in purch_std_entertainment]
+    # RC purchases are taxed separately (Art. 48 dual entry) — keep out of standard bucket
+    purch_std = [t for t in purch_std_all if t not in purch_std_entertainment and t not in purch_rc]
 
     # ── Boxes 1-5: Sales side ────────────────────────────────────────────────
     box1 = _amt(sales_std)                     # Net standard-rated sales
@@ -199,8 +303,9 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     import_net = _amt(purch_import)
     import_vat = import_net * 0.05
 
-    # Box 2: Output VAT = standard-rated sales VAT + RC self-assessed output
-    box2 = box1 * 0.05 + rc_vat
+    # Box 2: Output VAT = VAT on standard-rated sales + RC self-assessed output
+    sales_output_vat = sum(float(t.vat_amount_aed or 0) for t in sales_std)
+    box2 = sales_output_vat + rc_vat
 
     # ── Boxes 6-7: Expense side ──────────────────────────────────────────────
     # Entertainment excluded from both boxes per Art.53(1)(b)
@@ -210,7 +315,8 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     entertainment_net = _amt(purch_std_entertainment)
     entertainment_vat = entertainment_net * 0.05
 
-    # Box 6: Taxable expenses (standard-rated claimable + reverse-charge net)
+    # Box 6: Taxable expenses = claimable standard-rated + full reverse-charge net (Art. 48)
+    # RC amounts appear here AND drive Box 2 output VAT and Box 7 input VAT (dual entry).
     box6 = std_net + rc_net
 
     # Box 7: Input VAT = std claimable VAT + RC self-assessed input VAT (Art. 48) + import VAT
@@ -246,107 +352,242 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
 
 
 def generate_pdf_report(vat_return: VATReturn, company: Company, transactions: List[Transaction]) -> bytes:
-    """Generate PDF report formatted like FTA VAT return form"""
+    """Generate PDF worksheet for manual EmaraTax VAT201 filing (not an official FTA upload file)."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm)
     story = []
     styles = getSampleStyleSheet()
-    
-    # Title
+
     title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
+        "CustomTitle",
+        parent=styles["Heading1"],
         fontSize=16,
-        textColor=colors.HexColor('#1a1a1a'),
-        spaceAfter=12,
-        alignment=1  # Center
+        textColor=colors.HexColor("#1a1a1a"),
+        spaceAfter=6,
+        alignment=1,
     )
-    story.append(Paragraph("UAE FEDERAL TAX AUTHORITY", title_style))
-    story.append(Paragraph("VAT RETURN FORM", title_style))
-    story.append(Spacer(1, 12))
-    
-    # Company Information
+    subtitle_style = ParagraphStyle(
+        "Subtitle",
+        parent=styles["Normal"],
+        fontSize=9,
+        textColor=colors.HexColor("#555555"),
+        spaceAfter=10,
+        alignment=1,
+    )
+    story.append(Paragraph("UAE TAX — VAT201 FILING WORKSHEET", title_style))
+    story.append(
+        Paragraph(
+            "For manual entry on EmaraTax (eservices.tax.gov.ae). "
+            "This is not an official FTA upload file and does not submit to the FTA.",
+            subtitle_style,
+        )
+    )
+
     company_style = ParagraphStyle(
-        'CompanyInfo',
-        parent=styles['Normal'],
+        "CompanyInfo",
+        parent=styles["Normal"],
         fontSize=10,
-        spaceAfter=6
+        spaceAfter=6,
     )
     story.append(Paragraph(f"<b>Company:</b> {company.name}", company_style))
     story.append(Paragraph(f"<b>TRN:</b> {company.trn or 'N/A'}", company_style))
-    story.append(Paragraph(f"<b>Period:</b> {vat_return.period_start.strftime('%d/%m/%Y')} to {vat_return.period_end.strftime('%d/%m/%Y')}", company_style))
+    story.append(
+        Paragraph(
+            f"<b>Period:</b> {vat_return.period_start.strftime('%d/%m/%Y')} "
+            f"to {vat_return.period_end.strftime('%d/%m/%Y')}",
+            company_style,
+        )
+    )
+    story.append(
+        Paragraph(
+            f"<b>Return ID:</b> {vat_return.id} &nbsp;&nbsp; "
+            f"<b>Status:</b> {vat_return.status or 'generated'}",
+            company_style,
+        )
+    )
     story.append(Spacer(1, 12))
-    
-    # VAT Return Boxes Table
+
     data = [["Box", "Description", "Amount (AED)"]]
     for box, desc, amount in _vat_return_box_rows(vat_return):
         data.append([box, desc, f"{float(amount or 0):,.2f}"])
-    
-    table = Table(data, colWidths=[30*mm, 100*mm, 50*mm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-    ]))
-    
+
+    table = Table(data, colWidths=[30 * mm, 100 * mm, 50 * mm])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4472C4")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("ALIGN", (2, 1), (2, -1), "RIGHT"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ]
+        )
+    )
     story.append(table)
     story.append(Spacer(1, 12))
-    
-    # Highlight Box 8
+
     if vat_return.box8_vat_payable_or_refundable > 0:
-        story.append(Paragraph(f"<b>VAT Payable to FTA: AED {vat_return.box8_vat_payable_or_refundable:,.2f}</b>", 
-                              ParagraphStyle('Highlight', parent=styles['Normal'], fontSize=12, textColor=colors.red)))
+        story.append(
+            Paragraph(
+                f"<b>VAT Payable to FTA: AED {vat_return.box8_vat_payable_or_refundable:,.2f}</b>",
+                ParagraphStyle(
+                    "Highlight", parent=styles["Normal"], fontSize=12, textColor=colors.red
+                ),
+            )
+        )
     else:
-        story.append(Paragraph(f"<b>VAT Refundable from FTA: AED {abs(vat_return.box8_vat_payable_or_refundable):,.2f}</b>", 
-                              ParagraphStyle('Highlight', parent=styles['Normal'], fontSize=12, textColor=colors.green)))
-    
+        story.append(
+            Paragraph(
+                f"<b>VAT Refundable from FTA: AED {abs(vat_return.box8_vat_payable_or_refundable):,.2f}</b>",
+                ParagraphStyle(
+                    "Highlight", parent=styles["Normal"], fontSize=12, textColor=colors.green
+                ),
+            )
+        )
+
+    story.append(Spacer(1, 16))
+    guide_style = ParagraphStyle(
+        "Guide", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#333333"), spaceAfter=4
+    )
+    story.append(Paragraph("<b>How to file on EmaraTax</b>", guide_style))
+    story.append(
+        Paragraph(
+            "1. Log in to EmaraTax → VAT → open the VAT201 return for this period.",
+            guide_style,
+        )
+    )
+    story.append(
+        Paragraph(
+            "2. Enter the Box amounts from this worksheet (or use EmaraTax's "
+            "offline Excel template upload if available on the portal).",
+            guide_style,
+        )
+    )
+    story.append(
+        Paragraph(
+            "3. Review, declare, and Submit on EmaraTax. Save the acknowledgement reference.",
+            guide_style,
+        )
+    )
+    story.append(
+        Paragraph(
+            "4. Return here and mark this return as Filed (optional reference number).",
+            guide_style,
+        )
+    )
+
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
 
 
 def generate_excel_report(vat_return: VATReturn, company: Company, transactions: List[Transaction]) -> bytes:
-    """Generate Excel report with multiple sheets"""
+    """Generate Excel filing pack: EmaraTax worksheet + transaction support schedules."""
     wb = Workbook()
-    
+
     # Remove default sheet
     wb.remove(wb.active)
-    
+
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    warn_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    thin = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+
+    # Sheet 0: EmaraTax filing guide (copy values into portal)
+    ws0 = wb.create_sheet("EmaraTax Filing Guide", 0)
+    ws0.append(["UAE TAX - EXPORT FOR EMARATAX FILING"])
+    ws0.append([])
+    ws0.append(
+        [
+            "IMPORTANT: This workbook is a filing worksheet for your finance team. "
+            "It does NOT auto-submit to the FTA. File on EmaraTax at eservices.tax.gov.ae."
+        ]
+    )
+    ws0["A3"].fill = warn_fill
+    ws0.append([])
+    ws0.append(["Company", company.name])
+    ws0.append(["TRN", company.trn or "N/A"])
+    ws0.append(
+        [
+            "Tax period",
+            f"{vat_return.period_start.strftime('%d/%m/%Y')} to {vat_return.period_end.strftime('%d/%m/%Y')}",
+        ]
+    )
+    ws0.append(["Return ID", vat_return.id])
+    ws0.append(["Generated status", vat_return.status or "generated"])
+    ws0.append([])
+    ws0.append(["Steps"])
+    ws0.append(["1", "Log in to EmaraTax > VAT > open VAT201 for this period"])
+    ws0.append(
+        [
+            "2",
+            "Enter the Amount (AED) values below into the matching VAT201 boxes "
+            "(or download EmaraTax's official offline template from the portal, "
+            "copy these amounts into it, then use Upload Completed Template)",
+        ]
+    )
+    ws0.append(["3", "Review, declare, and Submit on EmaraTax - keep the acknowledgement reference"])
+    ws0.append(["4", "In UAE Tax, mark this return as Filed and paste the EmaraTax reference (optional)"])
+    ws0.append([])
+    ws0.append(["Box", "VAT201 description", "Amount (AED)", "Enter on EmaraTax"])
+    header_row = ws0.max_row
+    for cell in ws0[header_row]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin
+    first_box_row = header_row + 1
+    for box, desc, amount in _vat_return_box_rows(vat_return):
+        ws0.append([box, desc, float(amount or 0), "Copy this amount into the portal"])
+    last_box_row = ws0.max_row
+    for row in ws0.iter_rows(min_row=first_box_row, max_row=last_box_row):
+        for cell in row:
+            cell.border = thin
+            if cell.column == 3:
+                cell.number_format = "#,##0.00"
+    ws0.column_dimensions["A"].width = 12
+    ws0.column_dimensions["B"].width = 36
+    ws0.column_dimensions["C"].width = 16
+    ws0.column_dimensions["D"].width = 40
+
     # Sheet 1: VAT Return Summary
     ws1 = wb.create_sheet("VAT Return Summary")
-    ws1.append(["UAE FEDERAL TAX AUTHORITY - VAT RETURN"])
+    ws1.append(["UAE TAX - VAT201 BOX SUMMARY (records / working papers)"])
     ws1.append(["Company:", company.name])
     ws1.append(["TRN:", company.trn or "N/A"])
-    ws1.append(["Period:", f"{vat_return.period_start.strftime('%d/%m/%Y')} to {vat_return.period_end.strftime('%d/%m/%Y')}"])
+    ws1.append(
+        [
+            "Period:",
+            f"{vat_return.period_start.strftime('%d/%m/%Y')} to {vat_return.period_end.strftime('%d/%m/%Y')}",
+        ]
+    )
     ws1.append([])
-    
+
     headers = ["Box", "Description", "Amount (AED)"]
     ws1.append(headers)
 
     for box, desc, amount in _vat_return_box_rows(vat_return):
         ws1.append([box, desc, amount])
-    
-    # Format Sheet 1
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF")
-    
+
     for cell in ws1[5]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
-    
+
     for row in ws1.iter_rows(min_row=6, max_row=16):
         for cell in row:
             if cell.column == 3:  # Amount column
-                cell.number_format = '#,##0.00'
-    
+                cell.number_format = "#,##0.00"
+
     # Sheet 2: Sales Transactions Detail
     ws2 = wb.create_sheet("Sales Transactions")
     sales = [
@@ -355,25 +596,37 @@ def generate_excel_report(vat_return: VATReturn, company: Company, transactions:
         if _transaction_side(t) == "sale"
         and (t.vat_treatment or "") in ["standard_rated", "zero_rated", "exempt"]
     ]
-    ws2.append(["Date", "Description", "Vendor/Customer", "Invoice Number", "Amount (AED)", "VAT Treatment", "VAT Amount (AED)"])
-    
+    ws2.append(
+        [
+            "Date",
+            "Description",
+            "Vendor/Customer",
+            "Invoice Number",
+            "Amount (AED)",
+            "VAT Treatment",
+            "VAT Amount (AED)",
+        ]
+    )
+
     for t in sales:
-        ws2.append([
-            t.date.strftime('%d/%m/%Y'),
-            t.description,
-            t.vendor_or_customer or "",
-            t.invoice_number or "",
-            t.amount_aed,
-            t.vat_treatment or "",
-            t.vat_amount_aed
-        ])
-    
+        ws2.append(
+            [
+                t.date.strftime("%d/%m/%Y"),
+                t.description,
+                t.vendor_or_customer or "",
+                t.invoice_number or "",
+                t.amount_aed,
+                t.vat_treatment or "",
+                t.vat_amount_aed,
+            ]
+        )
+
     # Format Sheet 2
     for cell in ws2[1]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
-    
+
     # Sheet 3: Purchase Transactions Detail
     ws3 = wb.create_sheet("Purchase Transactions")
     purchases = [
@@ -383,46 +636,59 @@ def generate_excel_report(vat_return: VATReturn, company: Company, transactions:
         and (t.vat_treatment or "") == "standard_rated"
         and t.amount_aed > 0
     ]
-    ws3.append(["Date", "Description", "Vendor/Customer", "Invoice Number", "Amount (AED)", "VAT Amount (AED)"])
-    
+    ws3.append(
+        [
+            "Date",
+            "Description",
+            "Vendor/Customer",
+            "Invoice Number",
+            "Amount (AED)",
+            "VAT Amount (AED)",
+        ]
+    )
+
     for t in purchases:
-        ws3.append([
-            t.date.strftime('%d/%m/%Y'),
-            t.description,
-            t.vendor_or_customer or "",
-            t.invoice_number or "",
-            t.amount_aed,
-            t.vat_amount_aed
-        ])
-    
+        ws3.append(
+            [
+                t.date.strftime("%d/%m/%Y"),
+                t.description,
+                t.vendor_or_customer or "",
+                t.invoice_number or "",
+                t.amount_aed,
+                t.vat_amount_aed,
+            ]
+        )
+
     # Format Sheet 3
     for cell in ws3[1]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
-    
+
     # Sheet 4: Zero-rated breakdown
     ws4 = wb.create_sheet("Zero Rated Breakdown")
     zero_rated = [
         t for t in transactions if _transaction_side(t) == "sale" and t.vat_treatment == "zero_rated"
     ]
     ws4.append(["Date", "Description", "Vendor/Customer", "Invoice Number", "Amount (AED)"])
-    
+
     for t in zero_rated:
-        ws4.append([
-            t.date.strftime('%d/%m/%Y'),
-            t.description,
-            t.vendor_or_customer or "",
-            t.invoice_number or "",
-            t.amount_aed
-        ])
-    
+        ws4.append(
+            [
+                t.date.strftime("%d/%m/%Y"),
+                t.description,
+                t.vendor_or_customer or "",
+                t.invoice_number or "",
+                t.amount_aed,
+            ]
+        )
+
     # Format Sheet 4
     for cell in ws4[1]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
-    
+
     # Sheet 5: Exempt breakdown
     ws5 = wb.create_sheet("Exempt Breakdown")
     exempt = [t for t in transactions if _transaction_side(t) == "sale" and t.vat_treatment == "exempt"]
@@ -484,6 +750,7 @@ async def generate_return(
     box_values = calculate_vat_return_boxes(transactions)
     db_box_values = {k: v for k, v in box_values.items() if not k.startswith("_")}
     meta_box_values = {k: v for k, v in box_values.items() if k.startswith("_")}
+    validation_warnings = validate_vat_return_boxes(db_box_values)
 
     # Check if return already exists
     existing_return = db.query(VATReturn).filter(
@@ -498,7 +765,11 @@ async def generate_return(
         # Update existing return — only DB columns, not metadata keys
         for key, value in db_box_values.items():
             setattr(existing_return, key, value)
-        existing_return.status = "draft"
+        existing_return.status = "generated"
+        existing_return.submission_status = "not_submitted"
+        existing_return.submitted_at = None
+        existing_return.fta_reference_number = None
+        existing_return.submission_error = None
         vat_return = existing_return
     else:
         # Create new return — only DB columns, not metadata keys
@@ -507,13 +778,31 @@ async def generate_return(
             period_start=request.period_start,
             period_end=request.period_end,
             **db_box_values,
-            status="draft"
+            status="generated",
+            submission_status="not_submitted",
         )
         db.add(vat_return)
     
     db.commit()
     db.refresh(vat_return)
-    
+
+    try:
+        log_audit_event(
+            db=db,
+            company_id=company_id,
+            actor="user",
+            entity_type="vat_return",
+            action="filing",
+            after_state={
+                "return_id": vat_return.id,
+                "period_start": str(request.period_start),
+                "period_end": str(request.period_end),
+                "box8": db_box_values.get("box8_vat_payable_or_refundable"),
+            },
+        )
+    except Exception:
+        pass
+
     # Generate PDF and Excel
     pdf_content = generate_pdf_report(vat_return, company, transactions)
     excel_content = generate_excel_report(vat_return, company, transactions)
@@ -531,9 +820,12 @@ async def generate_return(
         **db_box_values,
         **meta_box_values,
         "status": vat_return.status,
+        "submission_status": vat_return.submission_status,
+        "fta_reference_number": vat_return.fta_reference_number,
         "created_at": vat_return.created_at,
         "pdf_url": f"/api/vat/returns/{vat_return.id}/pdf",
         "excel_url": f"/api/vat/returns/{vat_return.id}/excel",
+        "validation_warnings": validation_warnings,
     }
 
 
@@ -562,6 +854,17 @@ async def get_return_pdf(
 
     vat_return = _apply_calculated_boxes(vat_return, transactions)
     pdf_content = generate_pdf_report(vat_return, company, transactions)
+    try:
+        log_audit_event(
+            db=db,
+            company_id=company_id,
+            actor="user",
+            entity_type="vat_return",
+            action="export",
+            entity=f"pdf return {return_id}",
+        )
+    except Exception:
+        pass
 
     return StreamingResponse(
         io.BytesIO(pdf_content),
@@ -595,12 +898,104 @@ async def get_return_excel(
 
     vat_return = _apply_calculated_boxes(vat_return, transactions)
     excel_content = generate_excel_report(vat_return, company, transactions)
+    try:
+        log_audit_event(
+            db=db,
+            company_id=company_id,
+            actor="user",
+            entity_type="vat_return",
+            action="export",
+            entity=f"excel return {return_id}",
+        )
+    except Exception:
+        pass
 
     return StreamingResponse(
         io.BytesIO(excel_content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=vat_return_{return_id}.xlsx"},
     )
+
+
+@router.post("/returns/{return_id}/mark-filed", response_model=VATSubmitResponse)
+async def mark_vat_return_filed(
+    return_id: int,
+    body: MarkFiledRequest = Body(default_factory=MarkFiledRequest),
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark a generated return as filed after the client submits on EmaraTax themselves.
+
+    UAE Tax does not auto-submit to the FTA. This endpoint only tracks filing status.
+    """
+    vat_return = db.query(VATReturn).filter(
+        VATReturn.id == return_id, VATReturn.company_id == company_id
+    ).first()
+    if not vat_return:
+        raise HTTPException(status_code=404, detail="VAT return not found")
+
+    filed_at = datetime.utcnow()
+    ref = (body.fta_reference_number or "").strip() or None
+
+    payload_snapshot = {
+        "return_id": vat_return.id,
+        "company_id": vat_return.company_id,
+        "period_start": vat_return.period_start.isoformat(),
+        "period_end": vat_return.period_end.isoformat(),
+        "box8_vat_payable_or_refundable": vat_return.box8_vat_payable_or_refundable,
+        "fta_reference_number": ref,
+        "notes": body.notes,
+        "filing_mode": "manual_emaratax",
+    }
+
+    vat_return.status = "filed"
+    vat_return.submission_status = "filed_manually"
+    vat_return.submitted_at = filed_at
+    vat_return.fta_reference_number = ref
+    vat_return.submission_error = None
+
+    db.add(
+        FTASubmissionLog(
+            vat_return_id=vat_return.id,
+            attempted_at=filed_at,
+            submission_status="filed_manually",
+            payload_snapshot=payload_snapshot,
+            response_raw={
+                "mode": "manual_emaratax",
+                "message": "Marked filed by user after EmaraTax portal submission",
+            },
+        )
+    )
+
+    try:
+        log_audit_event(
+            db=db,
+            company_id=company_id,
+            actor="user",
+            entity_type="vat_return",
+            entity_id=return_id,
+            action="mark_filed",
+            after_state=payload_snapshot,
+        )
+    except Exception:
+        pass
+
+    db.commit()
+    db.refresh(vat_return)
+
+    return {
+        "return_id": vat_return.id,
+        "submission_status": vat_return.submission_status,
+        "submitted_at": vat_return.submitted_at,
+        "fta_reference_number": vat_return.fta_reference_number,
+        "submission_error": None,
+        "status": vat_return.status,
+        "message": (
+            "Marked as filed. UAE Tax does not submit to the FTA — "
+            "filing must be completed on EmaraTax."
+        ),
+    }
 
 
 @router.post("/returns/{return_id}/submit", response_model=VATSubmitResponse)
@@ -610,10 +1005,11 @@ async def submit_vat_return(
     db: Session = Depends(get_db),
 ):
     """
-    FTA submission tracked stub.
+    Deprecated: live FTA auto-submit is not available.
 
-    For now this route records an attempted submission and marks the return as failed
-    with a stubbed integration error, so frontend flows can handle a stable contract.
+    Direct third-party API submission requires FTA Tax Accounting Software
+    accreditation (encrypted return file + ITAS credentials). Use export endpoints
+    and POST /mark-filed after filing on EmaraTax.
     """
     vat_return = db.query(VATReturn).filter(
         VATReturn.id == return_id, VATReturn.company_id == company_id
@@ -621,47 +1017,15 @@ async def submit_vat_return(
     if not vat_return:
         raise HTTPException(status_code=404, detail="VAT return not found")
 
-    payload_snapshot = {
-        "return_id": vat_return.id,
-        "company_id": vat_return.company_id,
-        "period_start": vat_return.period_start.isoformat(),
-        "period_end": vat_return.period_end.isoformat(),
-        "box1_standard_rated_supplies": vat_return.box1_standard_rated_supplies,
-        "box2_vat_on_supplies": vat_return.box2_vat_on_supplies,
-        "box3_zero_rated_supplies": vat_return.box3_zero_rated_supplies,
-        "box4_exempt_supplies": vat_return.box4_exempt_supplies,
-        "box5_total_taxable_supplies": vat_return.box5_total_taxable_supplies,
-        "box6_taxable_expenses": vat_return.box6_taxable_expenses,
-        "box7_vat_on_expenses": vat_return.box7_vat_on_expenses,
-        "box8_vat_payable_or_refundable": vat_return.box8_vat_payable_or_refundable,
-    }
-
-    stub_error = "FTA submit integration is not configured"
-    attempted_at = datetime.utcnow()
-    vat_return.submission_status = "failed"
-    vat_return.submitted_at = attempted_at
-    vat_return.fta_reference_number = None
-    vat_return.submission_error = stub_error
-
-    db.add(
-        FTASubmissionLog(
-            vat_return_id=vat_return.id,
-            attempted_at=attempted_at,
-            submission_status=vat_return.submission_status,
-            payload_snapshot=payload_snapshot,
-            response_raw={"stub": True, "error": stub_error},
-        )
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Auto-submit to FTA EmaraTax is not available. "
+            "Export the PDF/Excel filing pack, enter or upload values on "
+            "EmaraTax (eservices.tax.gov.ae), then call "
+            f"POST /api/vat/returns/{return_id}/mark-filed to record filing status."
+        ),
     )
-    db.commit()
-    db.refresh(vat_return)
-
-    return {
-        "return_id": vat_return.id,
-        "submission_status": vat_return.submission_status,
-        "submitted_at": vat_return.submitted_at,
-        "fta_reference_number": vat_return.fta_reference_number,
-        "submission_error": vat_return.submission_error,
-    }
 
 
 class VATAssessedPayload(BaseModel):
@@ -816,10 +1180,10 @@ async def inbound_vat_assessed(
 @router.get("/returns")
 async def list_vat_returns(
     company_id: int = Depends(get_current_company_id),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """List VAT returns for a company."""
+    """List VAT returns for a company (tenant-scoped via X-Company-ID + membership)."""
     rows = (
         db.query(VATReturn)
         .filter(VATReturn.company_id == company_id)
@@ -840,6 +1204,53 @@ async def list_vat_returns(
         }
         for r in rows
     ]
+
+
+@router.get("/reconcile/{vat_return_id}/latest")
+async def get_latest_reconciliation(
+    vat_return_id: int,
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
+):
+    """Return the most recent saved reconciliation for a VAT return (company-scoped)."""
+    vat_return = (
+        db.query(VATReturn)
+        .filter(VATReturn.id == vat_return_id, VATReturn.company_id == company_id)
+        .first()
+    )
+    if not vat_return:
+        raise HTTPException(status_code=404, detail="VAT return not found")
+
+    row = (
+        db.query(ReconciliationResult)
+        .filter(
+            ReconciliationResult.vat_return_id == vat_return_id,
+            ReconciliationResult.company_id == company_id,
+        )
+        .order_by(ReconciliationResult.created_at.desc())
+        .first()
+    )
+    if not row:
+        return {
+            "status": None,
+            "difference_aed": 0.0,
+            "mismatches": [],
+            "recommendation": "",
+            "found": False,
+        }
+
+    return {
+        "status": row.status,
+        "difference_aed": row.difference_aed or 0.0,
+        "mismatches": row.mismatches or [],
+        "recommendation": (
+            "Loaded last saved reconciliation from the database. "
+            "Run reconciliation again to refresh against current transactions."
+        ),
+        "found": True,
+        "reconciliation_id": row.id,
+        "created_at": row.created_at,
+    }
 
 
 @router.post("/reconcile/{vat_return_id}", response_model=ReconciliationResponse)
@@ -997,12 +1408,25 @@ Provide a brief recommendation (2-3 sentences) on how to fix these issues. Focus
 Return only the recommendation text, no markdown or formatting."""
                 
                 message = claude_client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-sonnet-4-6",
                     max_tokens=200,
                     temperature=0.3,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 recommendation = message.content[0].text.strip()
+                try:
+                    log_ai_audit(
+                        db,
+                        company_id=company_id,
+                        user_email="user",
+                        action_type="ai_call",
+                        feature="vat_return_reconcile",
+                        input_summary=f"Reconcile mismatches: {len(all_mismatches)} items",
+                        output_summary=recommendation[:100],
+                        status="success",
+                    )
+                except Exception:
+                    pass
             except Exception as e:
                 recommendation = f"Review mismatches manually. Common causes: unverified transactions, incorrect classifications, or missing invoices. Error: {str(e)}"
         else:

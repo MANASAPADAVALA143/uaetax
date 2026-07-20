@@ -18,6 +18,7 @@ from sqlalchemy import and_, func as sa_func
 from database import get_db
 from middleware.auth import get_current_company_id
 from models import CTReturn, Transaction
+from utils.audit import log_ai_audit
 
 load_dotenv()
 
@@ -270,7 +271,8 @@ class NarrativeRequest(BaseModel):
 @router.post("/narrative")
 async def generate_narrative(
     payload: NarrativeRequest,
-    _company_id: int = Depends(get_current_company_id),
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     """Generate AI CT advisory narrative for CFO."""
     if claude_client is None:
@@ -307,12 +309,26 @@ Write in a professional but clear tone. Do not use markdown formatting."""
 
     try:
         msg = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=700,
             temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         )
-        return {"narrative": msg.content[0].text.strip()}
+        narrative = msg.content[0].text.strip()
+        try:
+            log_ai_audit(
+                db,
+                company_id=company_id,
+                user_email="user",
+                action_type="ai_call",
+                feature="corporate_tax",
+                input_summary=f"CT narrative profit AED {payload.accounting_profit:,.0f}",
+                output_summary=narrative[:100],
+                status="success",
+            )
+        except Exception:
+            pass
+        return {"narrative": narrative}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Claude narrative failed: {exc}") from exc
 
@@ -320,7 +336,8 @@ Write in a professional but clear tone. Do not use markdown formatting."""
 @router.post("/suggest-addbacks")
 async def suggest_addbacks(
     payload: SuggestAddbacksRequest,
-    _company_id: int = Depends(get_current_company_id),
+    company_id: int = Depends(get_current_company_id),
+    db: Session = Depends(get_db),
 ):
     if claude_client is None:
         raise HTTPException(
@@ -337,7 +354,7 @@ async def suggest_addbacks(
 
     try:
         message = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=1000,
             temperature=0.2,
             system=system_prompt,
@@ -347,6 +364,19 @@ async def suggest_addbacks(
         addbacks = body.get("addbacks", [])
         if not isinstance(addbacks, list):
             addbacks = []
+        try:
+            log_ai_audit(
+                db,
+                company_id=company_id,
+                user_email="user",
+                action_type="ai_call",
+                feature="corporate_tax",
+                input_summary=f"Suggest addbacks for {len(payload.trial_balance_items)} line items",
+                output_summary=f"{len(addbacks)} addbacks suggested",
+                status="success",
+            )
+        except Exception:
+            pass
         return {"company_id": payload.company_id, "addbacks": addbacks}
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=502, detail=f"Invalid JSON returned by Claude: {exc}") from exc

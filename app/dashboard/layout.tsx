@@ -55,6 +55,7 @@ export default function DashboardLayout({
 
   const navItems: MainNavItem[] = [
     { id: "overview", label: "Overview", icon: "🏠", href: "/dashboard" },
+    { id: "smart-upload", label: "Smart Upload", icon: "📂", href: "/dashboard/smart-upload" },
     {
       id: "e-invoicing",
       label: "E-Invoicing",
@@ -66,6 +67,10 @@ export default function DashboardLayout({
     { id: "invoice-flow", label: "Invoice Flow", icon: "🧾", href: "/dashboard/invoice-flow" },
     { id: "vat-return", label: "VAT Return", icon: "📋", href: "/dashboard/vat-return" },
     { id: "recon", label: "Recon Bot", icon: "🔍", href: "/dashboard/recon" },
+    { id: "vat-vs-accounts", label: "VAT vs Accounts", icon: "⚖️", href: "/dashboard/vat-vs-accounts" },
+    { id: "vat-compliance-review", label: "VAT Compliance Review", icon: "🔍", href: "/dashboard/vat-compliance-review" },
+    { id: "advance-payment", label: "Advance Payment VAT", icon: "💰", href: "/dashboard/advance-payment" },
+    { id: "einvoicing-readiness", label: "E-Invoicing Readiness", icon: "📋", href: "/dashboard/einvoicing-readiness" },
   ];
 
   type ComplianceNavItem = {
@@ -74,13 +79,21 @@ export default function DashboardLayout({
     icon: string;
     href: string;
     coming?: string;
+    disabled?: boolean;
   };
 
   const complianceItems: ComplianceNavItem[] = [
     { id: "corporate-tax", label: "Corporate Tax", icon: "🏛️", href: "/dashboard/corporate-tax" },
     { id: "esr", label: "ESR Filing", icon: "⚖️", href: "/dashboard/esr-filing" },
     { id: "transfer-pricing", label: "Transfer Pricing", icon: "🌐", href: "/dashboard/transfer-pricing" },
-    { id: "cbcr", label: "CbCR Report", icon: "📑", href: "/dashboard/cbcr-report" },
+    {
+      id: "cbcr",
+      label: "CbCR Report",
+      icon: "📑",
+      href: "#",
+      coming: "Enterprise",
+      disabled: true,
+    },
   ];
 
   type ReportNavItem = {
@@ -141,6 +154,23 @@ export default function DashboardLayout({
           </div>
           {complianceItems.map((item) => {
             const isActive = pathname === item.href;
+            if (item.disabled) {
+              return (
+                <div
+                  key={item.id}
+                  title="Country-by-Country Reporting — for MNE groups above AED 3.15B consolidated revenue (Enterprise)"
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-[13px] font-medium text-muted2 cursor-default select-none opacity-75"
+                >
+                  <span className="text-base flex-shrink-0">{item.icon}</span>
+                  {item.label}
+                  {item.coming && (
+                    <span className="ml-auto text-[9px] bg-gold-pale text-gold-lt border border-border-g px-1.5 py-0.5 rounded-full font-mono uppercase tracking-wide">
+                      {item.coming}
+                    </span>
+                  )}
+                </div>
+              );
+            }
             return (
               <Link
                 key={item.id}

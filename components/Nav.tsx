@@ -17,10 +17,10 @@ export default function Nav() {
     >
       <Link href="/" className="flex items-center gap-[11px] cursor-pointer no-underline">
         <div className="w-9 h-9 bg-gradient-to-br from-gold to-gold-lt rounded-lg flex items-center justify-center font-playfair font-black text-base text-deep shadow-[0_4px_16px_rgba(201,168,76,0.45)] flex-shrink-0">
-          G
+          U
         </div>
         <span className="font-playfair text-lg font-bold bg-gradient-to-br from-gold-lt to-white bg-clip-text text-transparent">
-          GulfTax AI
+          UAE Tax
         </span>
       </Link>
 

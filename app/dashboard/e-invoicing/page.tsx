@@ -439,7 +439,7 @@ export default function EInvoicingPage() {
         </p>
         <div className="flex flex-col lg:flex-row items-stretch gap-2 text-[11px] font-mono">
           {[
-            { corner: "Corner 1", label: "Your ERP / GulfTax", sub: "Generate PINT AE XML" },
+            { corner: "Corner 1", label: "Your ERP / UAE Tax", sub: "Generate PINT AE XML" },
             { corner: "Corner 2", label: "Your ASP", sub: "FTA-accredited provider" },
             { corner: "Corner 3", label: "Buyer ASP", sub: "Recipient network" },
             { corner: "Corner 4", label: "Buyer ERP", sub: "Accounts payable" },
@@ -458,9 +458,9 @@ export default function EInvoicingPage() {
         <div className="mt-5 rounded-lg border border-border bg-[rgba(4,12,30,0.6)] p-4">
           <p className="text-[11px] text-muted2 uppercase tracking-wide mb-2">ASP onboarding roadmap</p>
           <ol className="text-[13px] text-muted space-y-1.5 list-decimal list-inside">
-            <li><span className="text-green">Generate PINT AE XML in GulfTax ✅</span></li>
+            <li><span className="text-green">Generate PINT AE XML in UAE Tax ✅</span></li>
             <li>Appoint an FTA-accredited ASP</li>
-            <li>Connect your ASP to GulfTax via webhook</li>
+            <li>Connect your ASP to UAE Tax via webhook</li>
             <li>Test during voluntary pilot (Jul 2026)</li>
             <li>Go live before your mandatory deadline ({PHASE_1_GO_LIVE} Phase 1 / {PHASE_2_GO_LIVE} Phase 2)</li>
           </ol>

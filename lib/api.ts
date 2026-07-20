@@ -1,5 +1,5 @@
 /**
- * Shared axios instance for all GulfTax AI API calls.
+ * Shared axios instance for all UAE Tax API calls.
  *
  * Automatically injects:
  *   Authorization: Bearer <supabase_access_token>

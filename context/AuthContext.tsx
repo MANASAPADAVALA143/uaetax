@@ -176,6 +176,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     init();
 
+    // Local dev uses a fixed mock company — Supabase session events must not wipe it.
+    if (LOCAL_DEV) {
+      return () => {
+        mounted = false;
+      };
+    }
+
     // Listen for session changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {

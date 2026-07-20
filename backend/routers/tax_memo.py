@@ -25,6 +25,8 @@ from models import (
     Transaction,
     VATReturn,
 )
+from utils.audit import log_ai_audit
+from utils.prompt_guard import sanitize_input
 
 router = APIRouter(prefix="/api/tax", tags=["Tax Memo"])
 
@@ -301,7 +303,7 @@ Write the CFO memo now. Include exactly:
 4. CORPORATE TAX POSITION (cite Federal Decree-Law No.47 of 2022 where relevant)
 5. TOP 3 RISK ITEMS requiring immediate action (numbered list)
 6. RECOMMENDED ACTIONS with specific deadlines (numbered list)
-7. Sign-off line: "Prepared by: GulfTax AI | For review by: [Tax Head Name]"
+7. Sign-off line: "Prepared by: UAE Tax | For review by: [Tax Head Name]"
 """
 
 
@@ -378,28 +380,42 @@ async def generate_memo(
             )
 
     # Gather live data from DB
-    data = gather_memo_data(company_id, req.period, db)
+    period = sanitize_input(req.period or "", "memo_period")
+    data = gather_memo_data(company_id, period, db)
 
     # Generate memo via Claude (narrative only — no calculations)
     try:
         message = _claude.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=1200,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": _build_user_prompt(req.memo_type, data)}],
         )
         memo_text = message.content[0].text
+        try:
+            log_ai_audit(
+                db,
+                company_id=company_id,
+                user_email="user",
+                action_type="ai_call",
+                feature="tax_memo",
+                input_summary=f"{req.memo_type} memo for {period}",
+                output_summary=memo_text[:100],
+                status="success",
+            )
+        except Exception:
+            pass
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Claude API error: {exc}") from exc
 
     # Save to DB
-    memo_id = _save_memo(company_id, req.memo_type, req.period, memo_text, data, db)
+    memo_id = _save_memo(company_id, req.memo_type, period, memo_text, data, db)
 
     return MemoResponse(
         memo_id=memo_id,
         memo_text=memo_text,
         memo_type=req.memo_type,
-        period=req.period,
+        period=period,
         data_used=data,
         generated_at=datetime.now(timezone.utc).isoformat(),
         cached=False,

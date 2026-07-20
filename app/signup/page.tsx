@@ -137,10 +137,10 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         <div className="flex items-center gap-3 mb-8 justify-center">
           <div className="w-10 h-10 bg-gradient-to-br from-gold to-gold-lt rounded-lg flex items-center justify-center font-playfair font-black text-lg text-deep shadow-[0_4px_16px_rgba(201,168,76,0.45)]">
-            G
+            U
           </div>
           <span className="font-playfair text-xl font-bold bg-gradient-to-br from-gold-lt to-white bg-clip-text text-transparent">
-            GulfTax AI
+            UAE Tax
           </span>
         </div>
 

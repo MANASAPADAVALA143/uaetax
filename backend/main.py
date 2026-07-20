@@ -1,6 +1,7 @@
 """FastAPI main application"""
 import os
 import traceback
+import warnings
 from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, Request
@@ -20,13 +21,35 @@ from routers import invoice_flow
 from routers import fta_reports
 from routers.auth_router import router as auth_router
 from routers.einvoicing import router as einvoicing_router
+from routers.einvoicing_readiness import router as einvoicing_readiness_router
 from routers.corporatetax_routes import router as corporatetax_spec_router
 from routers.trn_validator import router as trn_validator_router
+from routers.advance_payment import router as advance_payment_router
+from routers.esr_filing import router as esr_filing_router
+from routers.vat_compliance_review import router as vat_compliance_review_router
+from routers.smart_upload import router as smart_upload_router
+from routers.vat_accounts_recon import router as vat_accounts_recon_router
 
 # Load repo-root .env only in local dev — Railway injects env vars directly
 _env_file = Path(__file__).resolve().parent.parent / ".env"
 if _env_file.exists():
     load_dotenv(_env_file, override=True)
+
+LOCAL_DEV = os.getenv("LOCAL_DEV", "false").lower() in ("1", "true", "yes")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+
+if LOCAL_DEV and ENVIRONMENT == "production":
+    raise RuntimeError(
+        "FATAL: LOCAL_DEV=true is not allowed in production. "
+        "Set LOCAL_DEV=false in your production .env"
+    )
+
+if LOCAL_DEV:
+    warnings.warn(
+        "WARNING: LOCAL_DEV=true — auth bypass active. Never deploy with this setting.",
+        RuntimeWarning,
+        stacklevel=1,
+    )
 
 # SQLite only: auto-create tables on startup (Postgres uses alembic migrations)
 if "sqlite" in os.getenv("DATABASE_URL", "sqlite"):
@@ -90,6 +113,84 @@ def _run_column_migrations():
             _add_column(conn, "vat_returns", "box9_standard_rated_purchases", "box9_standard_rated_purchases FLOAT DEFAULT 0.0")
             _add_column(conn, "vat_returns", "box10_zero_rated_purchases", "box10_zero_rated_purchases FLOAT DEFAULT 0.0")
             _add_column(conn, "vat_returns", "box11_exempt_purchases", "box11_exempt_purchases FLOAT DEFAULT 0.0")
+            if is_sqlite:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS advance_payments (
+                            id INTEGER PRIMARY KEY,
+                            company_id INTEGER NOT NULL,
+                            description VARCHAR(255),
+                            order_value FLOAT NOT NULL,
+                            advance_amount FLOAT NOT NULL,
+                            advance_date DATE NOT NULL,
+                            delivery_date DATE NOT NULL,
+                            vat_rate FLOAT NOT NULL DEFAULT 0.05,
+                            status VARCHAR(30) NOT NULL DEFAULT 'vat_due_this_period',
+                            created_at DATETIME
+                        )
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS advance_payments (
+                            id SERIAL PRIMARY KEY,
+                            company_id INTEGER NOT NULL,
+                            description VARCHAR(255),
+                            order_value DOUBLE PRECISION NOT NULL,
+                            advance_amount DOUBLE PRECISION NOT NULL,
+                            advance_date DATE NOT NULL,
+                            delivery_date DATE NOT NULL,
+                            vat_rate DOUBLE PRECISION NOT NULL DEFAULT 0.05,
+                            status VARCHAR(30) NOT NULL DEFAULT 'vat_due_this_period',
+                            created_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                        """
+                    )
+                )
+            if is_sqlite:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS related_party_transactions (
+                            id INTEGER PRIMARY KEY,
+                            company_id INTEGER NOT NULL,
+                            party_name VARCHAR(255) NOT NULL,
+                            party_relationship VARCHAR(100) NOT NULL DEFAULT 'Related party',
+                            transaction_type VARCHAR(100) NOT NULL DEFAULT 'Services',
+                            amount_aed FLOAT NOT NULL DEFAULT 0.0,
+                            arms_length_aed FLOAT,
+                            method VARCHAR(50) NOT NULL DEFAULT 'TNMM',
+                            doc_status VARCHAR(20) NOT NULL DEFAULT 'partial',
+                            notes VARCHAR(500),
+                            created_at DATETIME
+                        )
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS related_party_transactions (
+                            id SERIAL PRIMARY KEY,
+                            company_id INTEGER NOT NULL,
+                            party_name VARCHAR(255) NOT NULL,
+                            party_relationship VARCHAR(100) NOT NULL DEFAULT 'Related party',
+                            transaction_type VARCHAR(100) NOT NULL DEFAULT 'Services',
+                            amount_aed DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+                            arms_length_aed DOUBLE PRECISION,
+                            method VARCHAR(50) NOT NULL DEFAULT 'TNMM',
+                            doc_status VARCHAR(20) NOT NULL DEFAULT 'partial',
+                            notes VARCHAR(500),
+                            created_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                        """
+                    )
+                )
             conn.commit()
     except Exception:
         pass  # Don't crash startup if migration fails
@@ -97,7 +198,7 @@ def _run_column_migrations():
 _run_column_migrations()
 
 app = FastAPI(
-    title="GulfTax AI API",
+    title="UAE Tax API",
     version="1.0.0",
     description="UAE Tax SaaS — VAT, Corporate Tax, E-Invoicing",
 )
@@ -112,6 +213,12 @@ app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
 app.include_router(invoice_flow.router)  # prefix="/api/invoice" defined in router
 app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
 app.include_router(einvoicing_router)
+app.include_router(einvoicing_readiness_router)
+app.include_router(advance_payment_router)
+app.include_router(esr_filing_router)
+app.include_router(vat_compliance_review_router)
+app.include_router(smart_upload_router)
+app.include_router(vat_accounts_recon_router)
 app.include_router(corporatetax_spec_router)
 app.include_router(trn_validator_router)
 
@@ -162,7 +269,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.get("/")
 async def root():
-    return {"message": "GulfTax AI API", "status": "running"}
+    return {"message": "UAE Tax API", "status": "running"}
 
 
 @app.get("/health")

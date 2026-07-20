@@ -23,7 +23,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GulfTax AI — UAE's AI Tax Compliance Platform",
+  title: "UAE Tax — AI Tax Compliance Platform",
   description: "UAE Tax Compliance, Powered by AI",
 };
 
