@@ -10,7 +10,7 @@
   - [ ] `SUPABASE_URL=https://xxx.supabase.co`
   - [ ] `SUPABASE_SERVICE_ROLE_KEY=eyJ...`
   - [ ] `SUPABASE_JWT_SECRET=...`
-  - [ ] `RAILWAY_BACKEND_URL=https://your-app.up.railway.app`
+  - [ ] `BACKEND_URL=https://your-app.onrender.com` (optional — Render sets `RENDER_EXTERNAL_URL` automatically)
 - [ ] pgvector SQL migration applied in Supabase SQL editor (`supabase/migrations/004_pgvector_rag.sql`)
 - [ ] UAE law PDFs ingested: `python backend/scripts/ingest_to_pgvector.py`
 - [ ] Dependencies installed: `pip install -r requirements.txt`

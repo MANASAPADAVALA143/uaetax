@@ -199,7 +199,7 @@ export default function VatComplianceReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany?.id]);
+  }, [activeCompany?.company_id]);
 
   useEffect(() => {
     if (!loading) {
@@ -236,16 +236,18 @@ export default function VatComplianceReviewPage() {
     setError(null);
     if (!fromDb) setResult(null);
     try {
+      let data: AnalyseResponse;
       if (fromDb) {
         const form = new FormData();
         form.append("period", period);
         form.append("company_trn", companyTrn);
         form.append("entity_type", entityType);
-        const { data } = await apiClient.post<AnalyseResponse>(
+        const res = await apiClient.post<AnalyseResponse>(
           "/api/vat-compliance/analyse-from-db",
           form,
           { timeout: 300_000 }
         );
+        data = res.data;
         setResult(data);
       } else {
         const form = new FormData();
@@ -253,10 +255,11 @@ export default function VatComplianceReviewPage() {
         form.append("period", period);
         form.append("company_trn", companyTrn);
         form.append("entity_type", entityType);
-        const { data } = await apiClient.post<AnalyseResponse>("/api/vat-compliance/analyse", form, {
+        const res = await apiClient.post<AnalyseResponse>("/api/vat-compliance/analyse", form, {
           headers: { "Content-Type": "multipart/form-data" },
           timeout: 300_000,
         });
+        data = res.data;
         setResult(data);
       }
       setCheckedActions({});

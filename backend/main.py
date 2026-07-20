@@ -30,7 +30,7 @@ from routers.vat_compliance_review import router as vat_compliance_review_router
 from routers.smart_upload import router as smart_upload_router
 from routers.vat_accounts_recon import router as vat_accounts_recon_router
 
-# Load repo-root .env only in local dev — Railway injects env vars directly
+# Load repo-root .env only in local dev — Render/hosting injects env vars directly
 _env_file = Path(__file__).resolve().parent.parent / ".env"
 if _env_file.exists():
     load_dotenv(_env_file, override=True)
@@ -222,14 +222,11 @@ app.include_router(vat_accounts_recon_router)
 app.include_router(corporatetax_spec_router)
 app.include_router(trn_validator_router)
 
-# CORS — hardcoded origins + regex fallback for any *.vercel.app deployment
-# No env-var override so Railway can never accidentally break this
+# CORS — hardcoded origins + regex fallback for Vercel / Render deployments
 ALLOWED_ORIGINS = [
     "https://uaetax.vercel.app",
     "https://uaetax-manasapadavala143.vercel.app",
     "https://gulftax.vercel.app",
-    "https://uaetax-production.up.railway.app",
-    "https://uaetax-production-9b22.up.railway.app",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
@@ -246,7 +243,7 @@ for _o in _extra.split(","):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.(vercel\.app|onrender\.com)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -310,7 +307,8 @@ async def health_check():
 
     return {
         "status": "ok",
-        "backend_url": os.getenv("RAILWAY_BACKEND_URL", "not set"),
+        "backend_url": os.getenv("RENDER_EXTERNAL_URL")
+        or os.getenv("BACKEND_URL", "not set"),
         "rag_available": rag_ok,
         "db_connected": db_ok,
         "timestamp": datetime.utcnow().isoformat(),

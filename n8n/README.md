@@ -6,12 +6,12 @@ Set these in **n8n → Settings → Environment Variables**:
 
 | Variable | Value | Example |
 |---|---|---|
-| `GULFTAX_BACKEND_URL` | Railway backend URL (no trailing slash) | `https://gulftax-production.up.railway.app` |
+| `GULFTAX_BACKEND_URL` | Render backend URL (no trailing slash) | `https://uaetax-api.onrender.com` |
 | `ANTHROPIC_API_KEY` | Your Anthropic key | `sk-ant-...` |
 | `N8N_WEBHOOK_SECRET` | HMAC secret shared with backend | any strong random string |
 
 > **Important:** All HTTP Request nodes use `={{ $env.GULFTAX_BACKEND_URL }}/api/...`  
-> Never hardcode IP addresses or `localhost`. Update `GULFTAX_BACKEND_URL` whenever your Railway URL changes.
+> Never hardcode IP addresses or `localhost`. Update `GULFTAX_BACKEND_URL` whenever your Render URL changes.
 
 ---
 
@@ -51,17 +51,17 @@ These routes are **intentionally unauthenticated** via Bearer token — n8n uses
 
 ## Verifying your setup
 
-After deploying to Railway, check the health endpoint:
+After deploying to Render, check the health endpoint:
 
 ```
-curl https://your-railway-url.up.railway.app/api/health
+curl https://your-render-url.onrender.com/api/health
 ```
 
 Expected response:
 ```json
 {
   "status": "ok",
-  "backend_url": "https://your-railway-url.up.railway.app",
+  "backend_url": "https://your-render-url.onrender.com",
   "rag_available": true,
   "db_connected": true,
   "timestamp": "2026-05-17T..."

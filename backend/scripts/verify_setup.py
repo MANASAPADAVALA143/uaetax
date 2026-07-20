@@ -100,7 +100,7 @@ def check_environment():
     }
 
     optional = {
-        "RAILWAY_BACKEND_URL": os.getenv("RAILWAY_BACKEND_URL"),
+        "BACKEND_URL": os.getenv("RENDER_EXTERNAL_URL") or os.getenv("BACKEND_URL"),
         "SUPABASE_JWT_SECRET": os.getenv("SUPABASE_JWT_SECRET"),
     }
 

@@ -24,7 +24,7 @@ COPY . .
 # Make startup script executable
 RUN chmod +x start.sh
 
-# Expose port (Railway injects $PORT at runtime)
+# Expose port (Render injects $PORT at runtime)
 EXPOSE 8000
 
 # Run migrations then start server via startup script

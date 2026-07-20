@@ -1,0 +1,25 @@
+# Render Blueprint — GulfTax AI FastAPI backend
+# Connect repo in Render Dashboard → New → Blueprint, or create a Web Service manually.
+services:
+  - type: web
+    name: uaetax-api
+    runtime: docker
+    rootDir: backend
+    plan: starter
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOCAL_DEV
+        value: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
