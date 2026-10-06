@@ -51,6 +51,22 @@ export default function Nav() {
 
       {isDashboard && !loading && (
         <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/partial-exemption"
+            className={`text-xs font-medium no-underline hidden md:inline ${
+              pathname === "/dashboard/partial-exemption" ? "text-gold-lt" : "text-muted hover:text-white"
+            }`}
+          >
+            Partial Exemption
+          </Link>
+          <Link
+            href="/dashboard/designated-zones"
+            className={`text-xs font-medium no-underline hidden lg:inline ${
+              pathname === "/dashboard/designated-zones" ? "text-gold-lt" : "text-muted hover:text-white"
+            }`}
+          >
+            Designated Zones
+          </Link>
           <CompanySelector />
           {user?.email && (
             <span className="text-xs text-muted font-mono hidden lg:block truncate max-w-[180px]">

@@ -70,6 +70,8 @@ export default function DashboardLayout({
     { id: "vat-vs-accounts", label: "VAT vs Accounts", icon: "⚖️", href: "/dashboard/vat-vs-accounts" },
     { id: "vat-compliance-review", label: "VAT Compliance Review", icon: "🔍", href: "/dashboard/vat-compliance-review" },
     { id: "advance-payment", label: "Advance Payment VAT", icon: "💰", href: "/dashboard/advance-payment" },
+    { id: "partial-exemption", label: "Partial Exemption", icon: "🧮", href: "/dashboard/partial-exemption" },
+    { id: "designated-zones", label: "Designated Zones", icon: "📍", href: "/dashboard/designated-zones" },
     { id: "einvoicing-readiness", label: "E-Invoicing Readiness", icon: "📋", href: "/dashboard/einvoicing-readiness" },
   ];
 
