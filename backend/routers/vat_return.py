@@ -1410,7 +1410,6 @@ Return only the recommendation text, no markdown or formatting."""
                 message = claude_client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=200,
-                    temperature=0.3,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 recommendation = message.content[0].text.strip()

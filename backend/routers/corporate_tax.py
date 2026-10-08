@@ -311,7 +311,6 @@ Write in a professional but clear tone. Do not use markdown formatting."""
         msg = claude_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=700,
-            temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         )
         narrative = msg.content[0].text.strip()
@@ -356,7 +355,6 @@ async def suggest_addbacks(
         message = claude_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1000,
-            temperature=0.2,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )

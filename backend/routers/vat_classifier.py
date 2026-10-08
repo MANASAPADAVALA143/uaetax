@@ -928,7 +928,6 @@ Return JSON only:
         message = claude_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
-            temperature=0.1,
             system=system_prompt,
             messages=[
                 {

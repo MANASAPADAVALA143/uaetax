@@ -790,7 +790,6 @@ def extract_invoice(
         msg = claude_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1200,
-            temperature=0,
             messages=[{"role": "user", "content": user_content}],
         )
         raw = _extract_json(msg.content[0].text)
@@ -945,7 +944,6 @@ Return JSON only:
         msg = claude_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=300,
-            temperature=0.1,
             messages=[{"role": "user", "content": classify_prompt}],
         )
         vat_result = _extract_json(msg.content[0].text)

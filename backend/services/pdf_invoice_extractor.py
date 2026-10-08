@@ -160,7 +160,6 @@ def extract_and_classify_invoice(
         msg = claude_client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1200,
-            temperature=0,
             messages=[{"role": "user", "content": user_content}],
         )
         raw = _extract_json(msg.content[0].text)
