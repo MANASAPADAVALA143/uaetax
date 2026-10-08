@@ -75,6 +75,14 @@ export default function Nav() {
           >
             Bad Debt Relief
           </Link>
+          <Link
+            href="/dashboard/anomaly-detection"
+            className={`text-xs font-medium no-underline hidden 2xl:inline ${
+              pathname === "/dashboard/anomaly-detection" ? "text-gold-lt" : "text-muted hover:text-white"
+            }`}
+          >
+            Anomaly Detection
+          </Link>
           <CompanySelector />
           {user?.email && (
             <span className="text-xs text-muted font-mono hidden lg:block truncate max-w-[180px]">

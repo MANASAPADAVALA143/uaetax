@@ -77,6 +77,7 @@ export default function DashboardLayout({
     { id: "partial-exemption", label: "Partial Exemption", icon: "🧮", href: "/dashboard/partial-exemption" },
     { id: "designated-zones", label: "Designated Zones", icon: "📍", href: "/dashboard/designated-zones" },
     { id: "bad-debt-relief", label: "Bad Debt Relief", icon: "📉", href: "/dashboard/bad-debt-relief" },
+    { id: "anomaly-detection", label: "Anomaly Detection", icon: "📡", href: "/dashboard/anomaly-detection" },
   ];
 
   type ComplianceNavItem = {
