@@ -179,7 +179,7 @@ _ENTERTAINMENT_KWS = {
 
 
 def _is_entertainment(t: Transaction) -> bool:
-    """Art.53(1)(b): input VAT on entertainment/meals is not recoverable."""
+    """Art.54(1)(b): input VAT on entertainment/meals is not recoverable."""
     desc = (t.description or "").lower()
     return any(kw in desc for kw in _ENTERTAINMENT_KWS)
 
@@ -196,8 +196,8 @@ def _normalize_treatment(value: Optional[str]) -> str:
         return "out_of_scope"
     if t == "reverse_charge":
         return "reverse_charge"
-    if t in ("entertainment_restricted", "entertainment"):
-        return "entertainment_restricted"
+    if t in ("entertainment_blocked", "entertainment_restricted", "entertainment"):
+        return "entertainment_blocked"
     if t == "import_vat":
         return "import_vat"
     return t or "standard_rated"
@@ -275,9 +275,8 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
 
     purch_std_all = [
         t for t, r in enriched
-        if _is_purchase(t, r) and _treat(t, r) in ("standard_rated", "entertainment_restricted")
+        if _is_purchase(t, r) and _treat(t, r) in ("standard_rated", "entertainment_blocked")
     ]
-    purch_rc = [t for t, r in enriched if _is_reverse_charge_purchase(t, r)]
     purch_import = [t for t, r in enriched if _is_purchase(t, r) and _treat(t, r) == "import_vat"]
     purch_zero = [t for t, r in enriched if _is_purchase(t, r) and _treat(t, r) == "zero_rated"]
     purch_exempt = [t for t, r in enriched if _is_purchase(t, r) and _treat(t, r) == "exempt"]
@@ -285,10 +284,14 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     purch_std_entertainment = [
         t for t, r in enriched
         if _is_purchase(t, r)
-        and (_treat(t, r) == "entertainment_restricted" or r.get("entertainment_flag"))
+        and (
+            _treat(t, r) == "entertainment_blocked"
+            or r.get("entertainment_flag")
+            or _is_entertainment(t)
+        )
     ]
-    # RC purchases are taxed separately (Art. 48 dual entry) — keep out of standard bucket
-    purch_std = [t for t in purch_std_all if t not in purch_std_entertainment and t not in purch_rc]
+    # Standard-rated claimable purchases only (no entertainment, no reverse charge dual-entry)
+    purch_std = [t for t in purch_std_all if t not in purch_std_entertainment]
 
     # ── Boxes 1-5: Sales side ────────────────────────────────────────────────
     box1 = _amt(sales_std)                     # Net standard-rated sales
@@ -296,31 +299,35 @@ def calculate_vat_return_boxes(transactions: List[Transaction]) -> Dict[str, flo
     box4 = _amt(sales_ex)                      # Exempt sales
     box5 = box1 + box3 + box4                  # Total taxable supplies
 
-    # RC self-assessed output VAT (Art. 48) — must be added to output side
-    rc_net = _amt(purch_rc)
-    rc_vat = rc_net * 0.05
+    # Reverse charge dual-entry removed from Boxes 2/6/7 for this product path —
+    # uploaded AP invoices are not treated as Art. 48 reverse charge.
+    rc_net = 0.0
+    rc_vat = 0.0
 
     import_net = _amt(purch_import)
     import_vat = import_net * 0.05
 
-    # Box 2: Output VAT = VAT on standard-rated sales + RC self-assessed output
+    # Box 2: Output VAT on standard-rated sales only (no RC self-assessed output)
     sales_output_vat = sum(float(t.vat_amount_aed or 0) for t in sales_std)
-    box2 = sales_output_vat + rc_vat
+    box2 = sales_output_vat
 
     # ── Boxes 6-7: Expense side ──────────────────────────────────────────────
-    # Entertainment excluded from both boxes per Art.53(1)(b)
+    # Entertainment excluded from both boxes per Art.54(1)(b)
     std_net = _amt(purch_std)                  # claimable only
-    std_vat = std_net * 0.05
 
     entertainment_net = _amt(purch_std_entertainment)
-    entertainment_vat = entertainment_net * 0.05
+    entertainment_vat = sum(float(t.vat_amount_aed or 0) for t in purch_std_entertainment)
 
-    # Box 6: Taxable expenses = claimable standard-rated + full reverse-charge net (Art. 48)
-    # RC amounts appear here AND drive Box 2 output VAT and Box 7 input VAT (dual entry).
-    box6 = std_net + rc_net
+    # Box 6: Taxable expenses = claimable standard-rated purchases only (no RC)
+    box6 = std_net
 
-    # Box 7: Input VAT = std claimable VAT + RC self-assessed input VAT (Art. 48) + import VAT
-    box7 = std_vat + rc_vat + import_vat
+    # Box 7: Recoverable input VAT = actual VAT on claimable purchases only.
+    # Exclude entertainment_blocked and any line with vat_amount <= 0.
+    box7 = sum(
+        float(t.vat_amount_aed or 0)
+        for t in purch_std
+        if float(t.vat_amount_aed or 0) > 0
+    ) + import_vat
 
     # Box 8: Net VAT payable (+) or refundable (-)
     box8 = box2 - box7

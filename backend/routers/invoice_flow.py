@@ -431,19 +431,8 @@ def run_all_anomaly_checks(
         ))
 
     # ANOMALY 10 — Tax period mismatch
-    if inv_date:
-        today = date.today()
-        quarter_start = date(today.year, ((today.month - 1) // 3) * 3 + 1, 1)
-        if inv_date < quarter_start - timedelta(days=90):
-            flags.append(AnomalyFlag(
-                flag_id=10, flag="tax_period_mismatch", category="vat_compliance",
-                severity="LOW",
-                title="Invoice Pre-dates Current VAT Period — Please Verify",
-                what_is_wrong=f"Invoice date {inv_date_s} is from a prior VAT quarter. Late claims are permitted under Article 79 but should be reviewed to confirm the claim has not already been included in an earlier return.",
-                action_required="Confirm this invoice was not already included in a prior VAT return. If the claim was missed, it can generally be included in the next available return. Consult your VAT advisor for claims older than 12 months.",
-                uae_law_reference="Article 79, UAE VAT Law — input tax recovery period; FTA Public Clarification VATP006",
-                vat_at_risk_aed=round(vat_shown, 2),
-            ))
+    # Removed: prior-quarter invoices (e.g. 1 Jul inside Q3) were false-positives when
+    # processed early in the following quarter. Late claims are handled in review, not here.
 
     # ANOMALY 11 — Missing mandatory fields
     mandatory_missing = []
@@ -508,46 +497,32 @@ def run_all_anomaly_checks(
             vat_at_risk_aed=round(vat_shown, 2),
         ))
 
-    # ANOMALY 14 — Weekend date (UAE: Fri/Sat)
-    if inv_date and inv_date.weekday() in (4, 5):  # Friday=4, Saturday=5
-        day_name = "Friday" if inv_date.weekday() == 4 else "Saturday"
-        flags.append(AnomalyFlag(
-            flag_id=14, flag="weekend_date", category="fraud",
-            severity="LOW",
-            title=f"Invoice Dated on UAE Weekend ({day_name})",
-            what_is_wrong=f"Invoice date {inv_date_s} falls on {day_name} (UAE weekend). Businesses are typically closed. May indicate backdating.",
-            action_required="Verify actual service delivery date with supplier. Request delivery receipt or email confirmation.",
-            uae_law_reference="FTA Audit indicators — backdated invoices",
-            vat_at_risk_aed=0,
-        ))
+    # ANOMALY 14 — Weekend date: removed (UAE Fri/Sat dates are not reliable fraud signals)
 
-    # ANOMALY 15 — Ghost supplier (new + high value + no PO)
-    if vendor:
-        any_prior = db.query(Invoice).filter(
-            and_(Invoice.company_id == company_id, Invoice.vendor_name == vendor,
-                 Invoice.id != invoice_id)  # exclude self
-        ).first()
-        _po_raw = (extracted.po_reference or "").strip().lower()
-        # Treat verbal/retrospective approvals as "no PO" — only a real issued PO number counts
-        _po_null_values = {
-            "n/a", "na", "none", "nil", "-", "—", "not applicable", "not provided",
-            "0", "tbd", "pending", "null", "not available", "not issued",
-        }
-        _po_is_verbal = any(kw in _po_raw for kw in [
-            "verbal", "retrospective", "to be raised", "will be raised",
-            "pending", "approval only", "not yet", "to follow",
-        ])
-        has_po = bool(_po_raw) and _po_raw not in _po_null_values and not _po_is_verbal
-        if not any_prior and total > 25_000 and not has_po:
-            flags.append(AnomalyFlag(
-                flag_id=15, flag="ghost_supplier", category="fraud",
-                severity="HIGH",
-                title="Ghost Supplier Risk — New Vendor, High Value, No PO",
-                what_is_wrong=f"First invoice from '{vendor}' for AED {total:,.2f} with no Purchase Order reference. Unverified new supplier presenting high-value invoice is a major fraud risk.",
-                action_required="STOP payment. Perform full KYC: verify UAE trade license, confirm bank account independently, check director details. Do not process without signed PO.",
-                uae_law_reference="UAE Anti-Money Laundering Law + internal procurement policy",
-                vat_at_risk_aed=round(vat_shown, 2),
-            ))
+    # ANOMALY 15 — High value invoice without PO → CFO approval
+    _po_raw = (extracted.po_reference or "").strip().lower()
+    _po_null_values = {
+        "n/a", "na", "none", "nil", "-", "—", "not applicable", "not provided",
+        "0", "tbd", "pending", "null", "not available", "not issued",
+    }
+    _po_is_verbal = any(kw in _po_raw for kw in [
+        "verbal", "retrospective", "to be raised", "will be raised",
+        "pending", "approval only", "not yet", "to follow",
+    ])
+    has_po = bool(_po_raw) and _po_raw not in _po_null_values and not _po_is_verbal
+    if total > 50_000 and not has_po:
+        flags.append(AnomalyFlag(
+            flag_id=15, flag="high_value_cfo_approval", category="fraud",
+            severity="HIGH",
+            title="High Value Invoice · CFO Approval Required",
+            what_is_wrong=(
+                f"Invoice AED {total:,.2f} exceeds AED 50,000 threshold with no PO reference. "
+                "Route to CFO before payment."
+            ),
+            action_required="Route to CFO for approval before payment. Obtain a valid Purchase Order reference.",
+            uae_law_reference="Internal procurement policy — high-value approval threshold",
+            vat_at_risk_aed=round(vat_shown, 2),
+        ))
 
     # ANOMALY 16 — Price drift (Mann-Kendall)
     if vendor:
@@ -617,7 +592,7 @@ def run_all_anomaly_checks(
             title="Entertainment Expense — Input VAT is BLOCKED",
             what_is_wrong=f"Invoice appears to be for entertainment/meals/hospitality (AED {vat_shown:,.2f} VAT claimed). UAE VAT law explicitly blocks input tax recovery on entertainment expenses.",
             action_required=f"Remove VAT amount AED {vat_shown:,.2f} from VAT return Box 7 (input VAT). Post the full amount including VAT as an expense to P&L — it is not reclaimable.",
-            uae_law_reference="Article 53(1)(b), UAE VAT Law — blocked input tax on entertainment and meals",
+            uae_law_reference="Article 54(1)(b), UAE VAT Law — blocked input tax on entertainment and meals",
             vat_at_risk_aed=round(vat_shown, 2),
         ))
 
@@ -627,9 +602,15 @@ def run_all_anomaly_checks(
         flags.append(AnomalyFlag(
             flag_id=19, flag="free_zone_supplier", category="uae_specific",
             severity="MEDIUM",
-            title="Free Zone Supplier — Check VAT Treatment",
-            what_is_wrong=f"Supplier address indicates a UAE Free Zone. Sales from Free Zone to Mainland UAE may be treated as imports requiring reverse charge VAT, not standard-rated purchases.",
-            action_required="Verify supplier's VAT registration status. If QFZP qualified, different rules apply. Consult VAT specialist.",
+            title="Free Zone Supplier · Verify VAT Registration",
+            what_is_wrong=(
+                "Confirm supplier TRN and VAT registration status before posting as "
+                "standard-rated input VAT."
+            ),
+            action_required=(
+                "Verify the supplier's VAT registration certificate and TRN on the FTA "
+                "register before claiming input VAT."
+            ),
             uae_law_reference="Cabinet Decision 55/2017 — Free Zone VAT treatment; Article 51, UAE VAT Law",
             vat_at_risk_aed=round(subtotal * 0.05, 2),
         ))
@@ -668,9 +649,15 @@ def run_all_anomaly_checks(
         flags.append(AnomalyFlag(
             flag_id=21, flag="free_zone_supplier_name", category="uae_specific",
             severity="MEDIUM",
-            title="Free Zone Entity Detected — Verify VAT Treatment",
-            what_is_wrong=f"Supplier name/address indicates a UAE Free Zone entity. Supplies from a Qualifying Free Zone Person (QFZP) to mainland UAE may require reverse charge or may be treated as imports — standard 5% input VAT may not apply.",
-            action_required="Confirm if supplier is a QFZP under Cabinet Decision 55/2017. If yes, reverse charge applies. Request supplier's VAT registration certificate and confirm treatment in writing.",
+            title="Free Zone Supplier · Verify VAT Registration",
+            what_is_wrong=(
+                "Confirm supplier TRN and VAT registration status before posting as "
+                "standard-rated input VAT."
+            ),
+            action_required=(
+                "Verify the supplier's VAT registration certificate and TRN on the FTA "
+                "register before claiming input VAT."
+            ),
             uae_law_reference="Cabinet Decision 55/2017 — Qualifying Free Zone Persons; Article 51, UAE VAT Law — Designated Zones",
             vat_at_risk_aed=round(subtotal * 0.05, 2),
         ))
@@ -978,6 +965,10 @@ Return JSON only:
     risk = run_all_anomaly_checks(ex, company_id, db, payload.invoice_id, vat_result.get("vat_treatment", "standard_rated"))
     print(f"[classify-and-risk] anomaly checks done, score={risk.risk_score}", flush=True)
 
+    # Entertainment blocked VAT must not flow into Box 7 recoverable input
+    if any(f.flag == "entertainment_blocked_vat" for f in risk.flags):
+        vat_result["vat_treatment"] = "entertainment_blocked"
+
     # ── Persist classification + risk results ─────────────────────────────────
     inv.vat_treatment = vat_result.get("vat_treatment")
     # Use calculate_confidence so scores vary realistically across invoices
@@ -1010,9 +1001,10 @@ Return JSON only:
 
         vat_treatment = inv.vat_treatment or "standard_rated"
         line_items = inv.line_items or []
+        claimable = vat_treatment == "standard_rated"
 
         if not line_items and inv.total_aed:
-            subtotal = inv.total_aed / 1.05 if vat_treatment == "standard_rated" else inv.total_aed
+            subtotal = inv.total_aed / 1.05 if claimable else inv.total_aed
             exists = db.query(Transaction).filter(
                 and_(
                     Transaction.company_id == company_id,
@@ -1022,7 +1014,10 @@ Return JSON only:
                 )
             ).first()
             if not exists:
-                vat_amount = round(subtotal * 0.05, 2) if vat_treatment == "standard_rated" else 0.0
+                vat_amount = round(subtotal * 0.05, 2) if claimable else float(inv.vat_amount_aed or 0)
+                if vat_treatment == "entertainment_blocked":
+                    # Keep VAT amount for audit, but treatment blocks Box 7 recovery
+                    vat_amount = float(inv.vat_amount_aed or round(subtotal * 0.05, 2))
                 db.add(Transaction(
                     company_id=company_id,
                     date=inv_date,
