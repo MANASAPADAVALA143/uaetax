@@ -70,9 +70,13 @@ export default function DashboardLayout({
     { id: "vat-vs-accounts", label: "VAT vs Accounts", icon: "⚖️", href: "/dashboard/vat-vs-accounts" },
     { id: "vat-compliance-review", label: "VAT Compliance Review", icon: "🔍", href: "/dashboard/vat-compliance-review" },
     { id: "advance-payment", label: "Advance Payment VAT", icon: "💰", href: "/dashboard/advance-payment" },
+    { id: "einvoicing-readiness", label: "E-Invoicing Readiness", icon: "📋", href: "/dashboard/einvoicing-readiness" },
+  ];
+
+  const vatAdvancedItems: MainNavItem[] = [
     { id: "partial-exemption", label: "Partial Exemption", icon: "🧮", href: "/dashboard/partial-exemption" },
     { id: "designated-zones", label: "Designated Zones", icon: "📍", href: "/dashboard/designated-zones" },
-    { id: "einvoicing-readiness", label: "E-Invoicing Readiness", icon: "📋", href: "/dashboard/einvoicing-readiness" },
+    { id: "bad-debt-relief", label: "Bad Debt Relief", icon: "📉", href: "/dashboard/bad-debt-relief" },
   ];
 
   type ComplianceNavItem = {
@@ -147,6 +151,28 @@ export default function DashboardLayout({
                     {daysToPhase1Mandate}d
                   </span>
                 )}
+              </Link>
+            );
+          })}
+
+          <div className="text-[10px] uppercase tracking-[0.12em] text-muted2 font-mono px-3 pt-2.5 pb-1.5 mt-2">
+            VAT Advanced
+          </div>
+          {vatAdvancedItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                onClick={() => setActiveNav(item.id)}
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] cursor-pointer text-[13px] font-medium transition-all select-none ${
+                  isActive
+                    ? "bg-gold-pale text-gold-lt border border-border-g"
+                    : "text-muted hover:bg-[rgba(30,70,150,0.25)] hover:text-white"
+                }`}
+              >
+                <span className="text-base flex-shrink-0">{item.icon}</span>
+                {item.label}
               </Link>
             );
           })}

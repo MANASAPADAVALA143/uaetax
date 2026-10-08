@@ -67,6 +67,14 @@ export default function Nav() {
           >
             Designated Zones
           </Link>
+          <Link
+            href="/dashboard/bad-debt-relief"
+            className={`text-xs font-medium no-underline hidden xl:inline ${
+              pathname === "/dashboard/bad-debt-relief" ? "text-gold-lt" : "text-muted hover:text-white"
+            }`}
+          >
+            Bad Debt Relief
+          </Link>
           <CompanySelector />
           {user?.email && (
             <span className="text-xs text-muted font-mono hidden lg:block truncate max-w-[180px]">
