@@ -17,6 +17,7 @@ from database import get_db
 from middleware.auth import get_current_company_id
 from models import Invoice, Transaction
 from utils.audit import log_ai_audit
+from utils.claude_safe import messages_create as claude_messages_create
 
 router = APIRouter(prefix="/api/invoice", tags=["invoice-flow"])
 
@@ -787,7 +788,8 @@ def extract_invoice(
         ]
 
     try:
-        msg = claude_client.messages.create(
+        msg = claude_messages_create(
+            claude_client,
             model="claude-sonnet-4-6",
             max_tokens=1200,
             messages=[{"role": "user", "content": user_content}],
@@ -941,7 +943,8 @@ Return JSON only:
 
     print(f"[classify-and-risk] calling Claude for VAT classification", flush=True)
     try:
-        msg = claude_client.messages.create(
+        msg = claude_messages_create(
+            claude_client,
             model="claude-sonnet-4-6",
             max_tokens=300,
             messages=[{"role": "user", "content": classify_prompt}],

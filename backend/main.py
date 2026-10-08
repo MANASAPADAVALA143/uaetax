@@ -203,26 +203,8 @@ app = FastAPI(
     description="UAE Tax SaaS — VAT, Corporate Tax, E-Invoicing",
 )
 
-app.include_router(auth_router)
-app.include_router(vat_classifier_router)
-app.include_router(vat_return_router)
-app.include_router(dashboard_router)
-app.include_router(automations.router, prefix="/api/automations", tags=["automations"])
-app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"])
-app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
-app.include_router(invoice_flow.router)  # prefix="/api/invoice" defined in router
-app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
-app.include_router(einvoicing_router)
-app.include_router(einvoicing_readiness_router)
-app.include_router(advance_payment_router)
-app.include_router(esr_filing_router)
-app.include_router(vat_compliance_review_router)
-app.include_router(smart_upload_router)
-app.include_router(vat_accounts_recon_router)
-app.include_router(corporatetax_spec_router)
-app.include_router(trn_validator_router)
-
-# CORS — hardcoded origins + regex fallback for Vercel / Render deployments
+# CORS — register BEFORE routers so preflight always hits the middleware.
+# Hardcoded origins + regex for Vercel / Render preview deployments.
 ALLOWED_ORIGINS = [
     "https://uaetax.vercel.app",
     "https://uaetax-manasapadavala143.vercel.app",
@@ -245,9 +227,30 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"https://.*\.(vercel\.app|onrender\.com)",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
+
+app.include_router(auth_router)
+app.include_router(vat_classifier_router)
+app.include_router(vat_return_router)
+app.include_router(dashboard_router)
+app.include_router(automations.router, prefix="/api/automations", tags=["automations"])
+app.include_router(corporate_tax.router, prefix="/api/ct", tags=["corporate-tax"])
+app.include_router(tax_memo.router)  # prefix="/api/tax" defined in router
+app.include_router(invoice_flow.router)  # prefix="/api/invoice" defined in router
+app.include_router(fta_reports.router)   # prefix="/api/fta" defined in router
+app.include_router(einvoicing_router)
+app.include_router(einvoicing_readiness_router)
+app.include_router(advance_payment_router)
+app.include_router(esr_filing_router)
+app.include_router(vat_compliance_review_router)
+app.include_router(smart_upload_router)
+app.include_router(vat_accounts_recon_router)
+app.include_router(corporatetax_spec_router)
+app.include_router(trn_validator_router)
 
 
 @app.exception_handler(Exception)
@@ -273,12 +276,17 @@ async def root():
 async def health():
     import anthropic as _ant
     try:
+        from utils.claude_safe import INVOICE_CLAUDE_FIX_ID
+    except Exception:
+        INVOICE_CLAUDE_FIX_ID = "missing"
+    try:
         _key = os.getenv("ANTHROPIC_API_KEY", "")
         return {
             "status": "healthy",
             "anthropic_version": _ant.__version__,
             "api_key_set": bool(_key) and len(_key) > 10,
             "allowed_origins": ALLOWED_ORIGINS,
+            "invoice_claude_fix": INVOICE_CLAUDE_FIX_ID,
         }
     except Exception as e:
         return {"status": "error", "detail": str(e)}

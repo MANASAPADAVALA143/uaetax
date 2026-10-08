@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from services.vat_decision_tree import classify_with_decision_tree
 from services.vat_enrichment import validate_trn
+from utils.claude_safe import messages_create as claude_messages_create
 
 EXTRACT_PROMPT = """Extract from this UAE invoice:
 - vendor_name
